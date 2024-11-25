@@ -1,3 +1,5 @@
 fastapi
 uvicorn
 copilotkit
+asyncio
+json
