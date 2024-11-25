@@ -35,7 +35,9 @@ add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
 def main():
     """Run the uvicorn server."""
     import uvicorn
-    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
+    import os
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=True)
 
 
 if __name__ == "__main__":
