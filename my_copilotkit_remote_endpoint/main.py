@@ -1,8 +1,54 @@
+# /my_copilotkit_remote_endpoint/main.py
+
 from fastapi import FastAPI
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 from copilotkit import CopilotKitSDK, Action as CopilotAction
+from fastapi.responses import StreamingResponse
+import asyncio
+import json
 
 app = FastAPI()
+
+
+@app.post("/copilotkit_remote")
+async def copilotkit_remote():
+    async def event_generator():
+        # Simulate intermediate states
+        intermediate_states = [
+            {
+                "agentName": "basic_agent",
+                "node": "fetch_data",
+                "status": "processing",
+                "state": {"input": "Fetching data...", "messages": []}
+            },
+            {
+                "agentName": "basic_agent",
+                "node": "process_data",
+                "status": "processing",
+                "state": {"input": "Processing data...", "messages": []}
+            },
+            {
+                "agentName": "basic_agent",
+                "node": "complete",
+                "status": "completed",
+                "state": {
+                    "final_response": {
+                        "conditions": "Sunny",
+                        "temperature": 25,
+                        "wind_direction": "NW",
+                        "wind_speed": 15
+                    },
+                    "input": "Fetch the name for user ID 123.",
+                    "messages": []
+                }
+            },
+        ]
+
+        for state in intermediate_states:
+            yield f"data:{json.dumps(state)}\n\n"
+            await asyncio.sleep(1)  # Simulate delay between states
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 # Define your backend action
@@ -37,7 +83,7 @@ def main():
     import uvicorn
     import os
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
 
 
 if __name__ == "__main__":

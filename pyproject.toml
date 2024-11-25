@@ -10,6 +10,7 @@ python = "^3.11"
 copilotkit = "^0.1.27"
 fastapi = "^0.115.5"
 uvicorn = "^0.32.1"
+asyncio = "^3.4.3"
 
 
 [build-system]
