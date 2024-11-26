@@ -1,4 +1,4 @@
-# server/handlers/action_handler.py
+# handlers/action_handler.py
 from typing import Any, Dict
 from fastapi import HTTPException
 import asyncio
