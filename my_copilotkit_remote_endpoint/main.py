@@ -1,16 +1,47 @@
 # main.py
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 from copilotkit import CopilotKitSDK, Action as CopilotAction
 from fastapi.responses import StreamingResponse
 import asyncio
 import json
+import logging
+import uvicorn
 
-app = FastAPI()
+app = FastAPI(
+    redirect_slashes=False  # Add this line
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-@app.post("/copilotkit_remote_stream")
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger = logging.getLogger("uvicorn.access")
+    logger.info(f"Request: {request.method} {request.url}")
+    response = await call_next(request)
+    return response
+
+
+@app.post("/api/copilotkit_remote/info")  # Updated path
+async def copilotkit_remote_info():
+    return {
+        "name": "basic_agent",
+        "description": "A basic agent that can perform tasks",
+        "capabilities": ["fetch_data", "process_data"]
+    }
+
+
+@app.post("/api/copilotkit_remote")  # Updated path
 async def copilotkit_remote_stream():
     async def event_generator():
         # Simulate intermediate states
@@ -74,7 +105,7 @@ action = CopilotAction(
 
 # Initialize the CopilotKit SDK
 sdk = CopilotKitSDK(actions=[action])
+add_fastapi_endpoint(app, sdk, "/api/copilotkit")
 
-# Add the CopilotKit endpoint to your FastAPI app with a different
-#  path to avoid conflicts
-add_fastapi_endpoint(app, sdk, "/api/copilotkit_remote")
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
