@@ -77,4 +77,4 @@ sdk = CopilotKitSDK(actions=[action])
 
 # Add the CopilotKit endpoint to your FastAPI app with a different
 #  path to avoid conflicts
-add_fastapi_endpoint(app, sdk, "/copilotkit_remote_action")
+add_fastapi_endpoint(app, sdk, "/api/copilotkit_remote")
