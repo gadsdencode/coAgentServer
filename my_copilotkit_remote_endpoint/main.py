@@ -16,6 +16,12 @@ from typing import Optional
 import uuid
 import time
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+
+# Model for incoming action request
+class CopilotActionRequest(BaseModel):
+    action_name: str
+    parameters: Optional[dict] = None
 
 
 app = FastAPI(
@@ -146,7 +152,34 @@ async def human_approval_stream(request_id: str):
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
 
-@app.post("/copilotkit_remote")  # Changed from /api/copilotkit_remote
+@app.post("/copilotkit_remote")  # Updated to handle dynamic actions
+async def copilotkit_remote_action(request: CopilotActionRequest):
+    try:
+        # Determine the action to execute
+        action_name = request.action_name
+        parameters = request.parameters or {}
+
+        # Check if action is registered in the Copilot SDK
+        action = sdk.get_action(action_name)
+        if not action:
+            raise HTTPException(status_code=404, detail=f"Action '{action_name}' not found")
+
+        # Execute the action
+        result = await action.handler(**parameters)
+
+        return JSONResponse(content={"status": "success", "result": result})
+
+    except HTTPException as he:
+        logger.error(f"HTTP Error while executing action '{request.action_name}': {str(he)}")
+        raise he
+
+    except Exception as e:
+        logger.error(f"Error while executing action '{request.action_name}': {str(e)}")
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+
+@app.post("/copilotkit_remote/stream")
 async def copilotkit_remote_stream():
     async def event_generator():
         # Simulate intermediate states
