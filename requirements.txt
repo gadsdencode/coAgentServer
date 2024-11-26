@@ -3,3 +3,4 @@ uvicorn
 copilotkit
 python-dotenv
 aioredis>=2.0.0
+redis
