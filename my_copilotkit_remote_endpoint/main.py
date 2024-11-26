@@ -18,6 +18,7 @@ import time
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 
+
 # Model for incoming action request
 class CopilotActionRequest(BaseModel):
     action_name: str
@@ -29,12 +30,16 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+# Allow "*" for development but include specific origins to make the system ready for production scenarios.
+allowed_origins = [
+    "http://localhost:3000",
+    "https://ai-customer-support-nine-eta.vercel.app",
+    "https://coagentserver-production.up.railway.app",  # Add your railway deployment URL here
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://ai-customer-support-nine-eta.vercel.app",
-    ],
+    allow_origins=allowed_origins if not os.getenv("ENV") == "development" else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -153,11 +158,18 @@ async def human_approval_stream(request_id: str):
 
 
 @app.post("/copilotkit_remote")  # Updated to handle dynamic actions
-async def copilotkit_remote_action(request: CopilotActionRequest):
+async def copilotkit_remote_action(request: Request):
     try:
+        # Extract the action request
+        data = await request.json()
+        logger.info(f"Received action request: {data}")
+
+        # Validate action request data using the Pydantic model
+        action_request = CopilotActionRequest(**data)
+
         # Determine the action to execute
-        action_name = request.action_name
-        parameters = request.parameters or {}
+        action_name = action_request.action_name
+        parameters = action_request.parameters or {}
 
         # Check if action is registered in the Copilot SDK
         action = sdk.get_action(action_name)
@@ -167,15 +179,19 @@ async def copilotkit_remote_action(request: CopilotActionRequest):
         # Execute the action
         result = await action.handler(**parameters)
 
+        logger.info(f"Action '{action_name}' executed successfully with result: {result}")
         return JSONResponse(content={"status": "success", "result": result})
 
     except HTTPException as he:
-        logger.error(f"HTTP Error while executing action '{request.action_name}': {str(he)}")
+        logger.error(f"HTTP Error while executing action '{data.get('action_name', '')}': {str(he)}")
         raise he
-
+    except ValueError as ve:
+        logger.error(f"ValueError in request payload: {str(ve)}")
+        return JSONResponse(status_code=400, content={"status": "error", "message": "Invalid request payload"})
     except Exception as e:
-        logger.error(f"Error while executing action '{request.action_name}': {str(e)}")
+        logger.error(f"Unexpected error while executing action: {str(e)}", exc_info=True)
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
 
 
 
