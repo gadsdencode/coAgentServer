@@ -9,6 +9,9 @@ import asyncio
 import json
 import logging
 import uvicorn
+import os
+import datetime
+
 
 app = FastAPI(
     redirect_slashes=False  # Add this line
@@ -17,11 +20,23 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your domain
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3000/",
+        "https://ai-customer-support-nine-eta.vercel.app",
+        "https://ai-customer-support-nine-eta.vercel.app/"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Configure logging properly
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 
 @app.middleware("http")
@@ -32,7 +47,16 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-@app.post("/api/copilotkit_remote/info")  # Updated path
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "version": "1.0.0"
+    }
+
+
+@app.post("/copilotkit_remote/info")
 async def copilotkit_remote_info():
     return {
         "name": "basic_agent",
@@ -41,7 +65,7 @@ async def copilotkit_remote_info():
     }
 
 
-@app.post("/api/copilotkit_remote")  # Updated path
+@app.post("/copilotkit_remote")  # Changed from /api/copilotkit_remote
 async def copilotkit_remote_stream():
     async def event_generator():
         # Simulate intermediate states
@@ -108,4 +132,12 @@ sdk = CopilotKitSDK(actions=[action])
 add_fastapi_endpoint(app, sdk, "/api/copilotkit")
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    # Update port to match Railway's requirements
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",  # Required for Railway
+        port=port,
+        log_level="info",
+        access_log=True
+    )
