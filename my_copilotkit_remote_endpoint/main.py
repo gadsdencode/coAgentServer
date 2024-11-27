@@ -15,7 +15,7 @@ from typing import Optional
 import uuid
 import time
 from pydantic import BaseModel
-from starlette.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
@@ -44,12 +44,15 @@ allowed_origins_prod = [
     "https://coagentserver-production.up.railway.app",
 ]
 
+allowed_origins = [
+    "http://localhost:3000",
+    "https://ai-customer-support-nine-eta.vercel.app",
+    "https://coagentserver-production.up.railway.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=(
-        allowed_origins_dev if os.getenv("ENV") == "development"
-        else allowed_origins_prod
-    ),
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -110,9 +113,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
-    logger.info(f"Request: {request.method} {request.url}")
+async def add_cors_headers(request: Request, call_next):
     response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "http://localhost:3000")
+    response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 
