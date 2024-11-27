@@ -20,6 +20,11 @@ settings = Settings()
 redis_client = redis.from_url(
     settings.REDIS_URL,
     decode_responses=True,
-    max_connections=10,    # Limit connections
-    socket_timeout=5,      # Set timeout
+    max_connections=10,
+    socket_timeout=5,
 )
+
+
+# Add close method to properly cleanup connections
+async def close():
+    await redis_client.aclose()
