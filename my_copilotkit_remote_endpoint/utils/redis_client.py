@@ -1,0 +1,25 @@
+# utils/redis_client.py
+
+import redis.asyncio as redis
+from pydantic import Field
+from typing import Optional
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    ENV: Optional[str] = Field(default=None)
+    REDIS_URL: str = Field(default="redis://default:rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj@autorack.proxy.rlwy.net:57574")
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+settings = Settings()
+
+redis_client = redis.from_url(
+    settings.REDIS_URL,
+    decode_responses=True,
+    max_connections=10,    # Limit connections
+    socket_timeout=5,      # Set timeout
+)
