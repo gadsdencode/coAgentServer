@@ -13,7 +13,7 @@ async def safe_redis_operation(coroutine, retries=3, timeout=5):
             logger.error(f"Redis operation timed out on attempt {attempt}")
         except Exception as e:
             logger.error(f"Redis operation failed on attempt {attempt}: {str(e)}")
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
     raise HTTPException(
         status_code=503,
         detail="Unable to complete Redis operation after multiple attempts"

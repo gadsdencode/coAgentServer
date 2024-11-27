@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     ENV: Optional[str] = Field(default=None)
-    REDIS_URL: str = Field(default="redis://default:rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj@autorack.proxy.rlwy.net:57574")
+    REDIS_URL: str = Field(default="redis://default:rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj@redis.railway.internal:6379")
 
     class Config:
         env_file = ".env"
@@ -21,7 +21,7 @@ redis_client = redis.from_url(
     settings.REDIS_URL,
     decode_responses=True,
     max_connections=10,
-    socket_timeout=5,
+    socket_timeout=10,
 )
 
 
