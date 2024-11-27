@@ -39,16 +39,15 @@ sentry_sdk.init(
 app = FastAPI()
 app.add_middleware(SentryAsgiMiddleware)
 
-# For the CORS middleware
-allowed_origins_dev = ["*"]
-allowed_origins_prod = [
-    "http://localhost:3000",
-    "https://ai-customer-support-nine-eta.vercel.app",
-    "https://coagentserver-production.up.railway.app",
-]
+# Dynamic Environment for CORS Allowance
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',')
+if not allowed_origins or allowed_origins == ['']:
+    allowed_origins = ["*"] if os.getenv("ENV") == "development" else [
+        "http://localhost:3000",
+        "https://ai-customer-support-nine-eta.vercel.app",
+        "https://coagentserver-production.up.railway.app"
+    ]
 
-# CORS Middleware setup for dynamic environment matching
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -98,21 +97,27 @@ async def add_cors_headers(request: Request, call_next):
 # Health check endpoint
 @app.get("/health")
 async def health_check():
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Credentials": "true",
+    }
     redis_status = "up"
     try:
-        # Attempt to connect to Redis and report status
         result = await safe_redis_operation(redis_client.ping())
         logger.info(f"Redis ping result: {result}")
     except Exception as e:
         redis_status = "down"
         logger.error(f"Redis ping failed with error: {str(e)}")
 
-    return {
-        "status": "healthy" if redis_status == "up" else "error",
-        "redis": redis_status,
-        "timestamp": datetime.datetime.now().isoformat(),
-        "version": "1.0.0",
-    }
+    return JSONResponse(
+        content={
+            "status": "healthy" if redis_status == "up" else "error",
+            "redis": redis_status,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "version": "1.0.0",
+        },
+        headers=headers
+    )
 
 
 @app.post("/copilotkit_remote/info")
