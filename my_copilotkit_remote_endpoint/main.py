@@ -10,7 +10,6 @@ import logging
 import uvicorn
 import os
 import datetime
-from utils import redis_client
 from typing import Optional
 import uuid
 import time
@@ -18,7 +17,8 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-from utils import redis_utils
+from my_copilotkit_remote_endpoint.utils import redis_client, redis_utils
+
 
 safe_redis_operation = redis_utils.safe_redis_operation
 # For the Sentry DSN, store it in an environment variable
