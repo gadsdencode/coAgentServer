@@ -3,3 +3,7 @@ uvicorn
 copilotkit
 python-dotenv
 redis
+pydantic
+pydantic-settings
+sentry-sdk
+

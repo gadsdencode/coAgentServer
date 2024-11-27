@@ -13,6 +13,9 @@ uvicorn = "^0.32.1"
 asyncio = "^3.4.3"
 python-dotenv = "^1.0.1"
 redis = "^5.2.0"
+sentry-sdk = {extras = ["fastapi"], version = "^2.19.0"}
+pydantic-settings = "^2.6.1"
+pydantic = "^2.10.2"
 
 
 [build-system]
