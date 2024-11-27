@@ -10,7 +10,7 @@ import logging
 import uvicorn
 import os
 import datetime
-from utils.redis_client import redis_client
+from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
 from typing import Optional
 import uuid
 import time
