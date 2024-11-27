@@ -1,7 +1,7 @@
 # main.py
 
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+# from fastapi.middleware.cors import CORSMiddleware
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 from copilotkit import CopilotKitSDK, Action as CopilotAction
 from fastapi.responses import StreamingResponse
@@ -11,12 +11,13 @@ import logging
 import uvicorn
 import os
 import datetime
-import redis
+import redis.asyncio as redis
 from typing import Optional
 import uuid
 import time
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse
+from starlette.middleware.cors import CORSMiddleware
 
 
 # Model for incoming action request
@@ -43,7 +44,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],  # Add this line
 )
+
 
 # Configure logging properly
 logging.basicConfig(
@@ -53,7 +56,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Redis connection
-redis = redis.from_url("redis://localhost", decode_responses=True)
+redis_client = redis.from_url("redis://localhost", decode_responses=True)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "message": str(exc)},
+        headers={"Access-Control-Allow-Origin": "*"}  # Ensure CORS header
+    )
 
 
 @app.middleware("http")
@@ -89,7 +102,7 @@ async def request_human_approval(request: Request):
     request_id = data.get('request_id', str(uuid.uuid4()))
 
     # Store request data with timestamp
-    await redis.hset(
+    await redis_client.hset(
         f"approval_request:{request_id}",
         mapping={
             'data': json.dumps(data),
@@ -98,7 +111,7 @@ async def request_human_approval(request: Request):
         }
     )
     # Set expiration for 1 hour
-    await redis.expire(f"approval_request:{request_id}", 3600)
+    await redis_client.expire(f"approval_request:{request_id}", 3600)
 
     return StreamingResponse(human_approval_stream(request_id))
 
@@ -106,7 +119,7 @@ async def request_human_approval(request: Request):
 async def check_human_approval(request_id: str) -> Optional[bool]:
     try:
         # Get current status from Redis
-        request_data = await redis.hgetall(f"approval_request:{request_id}")
+        request_data = await redis_client.hgetall(f"approval_request:{request_id}")
 
         if not request_data:
             logger.error(f"No approval request found for ID: {request_id}")
@@ -115,7 +128,7 @@ async def check_human_approval(request_id: str) -> Optional[bool]:
         # Check if request has expired (1 hour timeout)
         timestamp = float(request_data.get('timestamp', 0))
         if time.time() - timestamp > 3600:
-            await redis.delete(f"approval_request:{request_id}")
+            await redis_client.delete(f"approval_request:{request_id}")
             logger.warning(f"Approval request {request_id} timed out")
             return None
 
@@ -142,7 +155,7 @@ async def human_approval_stream(request_id: str):
             if approval_status:
                 yield f"data: {json.dumps({'approved': True})}\n\n"
                 # Cleanup after approval
-                await redis.delete(f"approval_request:{request_id}")
+                await redis_client.delete(f"approval_request:{request_id}")
                 break
 
             attempts += 1
@@ -150,7 +163,7 @@ async def human_approval_stream(request_id: str):
 
         if attempts >= max_attempts:
             yield f"data: {json.dumps({'error': 'Request timed out'})}\n\n"
-            await redis.delete(f"approval_request:{request_id}")
+            await redis_client.delete(f"approval_request:{request_id}")
 
     except Exception as e:
         logger.error(f"Error in approval stream: {str(e)}")
@@ -191,8 +204,6 @@ async def copilotkit_remote_action(request: Request):
     except Exception as e:
         logger.error(f"Unexpected error while executing action: {str(e)}", exc_info=True)
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
-
-
 
 
 @app.post("/copilotkit_remote/stream")
@@ -271,18 +282,18 @@ class ApprovalUpdate(BaseModel):
 async def update_approval_status(update: ApprovalUpdate):
     try:
         # Check if request exists
-        request_data = await redis.hgetall(f"approval_request:{update.request_id}")
+        request_data = await redis_client.hgetall(f"approval_request:{update.request_id}")
         if not request_data:
             raise HTTPException(status_code=404, detail="Approval request not found")
 
         # Check if request has expired
         timestamp = float(request_data.get('timestamp', 0))
         if time.time() - timestamp > 3600:
-            await redis.delete(f"approval_request:{update.request_id}")
+            await redis_client.delete(f"approval_request:{update.request_id}")
             raise HTTPException(status_code=410, detail="Approval request has expired")
 
         # Update approval status
-        await redis.hset(
+        await redis_client.hset(
             f"approval_request:{update.request_id}",
             'status',
             'approved' if update.approved else 'rejected'
