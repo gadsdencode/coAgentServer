@@ -10,7 +10,7 @@ import logging
 import uvicorn
 import os
 import datetime
-from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
+from utils import redis_client
 from typing import Optional
 import uuid
 import time
@@ -18,7 +18,9 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
+from utils import redis_utils
 
+safe_redis_operation = redis_utils.safe_redis_operation
 # For the Sentry DSN, store it in an environment variable
 SENTRY_DSN = os.getenv(
     "SENTRY_DSN",
@@ -70,30 +72,6 @@ logger = logging.getLogger(__name__)
 class CopilotActionRequest(BaseModel):
     action_name: str
     parameters: Optional[dict] = None
-
-
-# Robust and Optimal Implementation of safe_redis_operation
-async def safe_redis_operation(coroutine, retries=3, timeout=5):
-    for attempt in range(1, retries + 1):
-        try:
-            return await asyncio.wait_for(coroutine, timeout=timeout)
-        except asyncio.TimeoutError:
-            msg = f"Redis operation timed out on attempt {attempt}"
-            logger.error(msg)
-            if attempt == retries:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Redis operation timed out"
-                )
-        except Exception as e:
-            msg = f"Redis operation failed on attempt {attempt}: {str(e)}"
-            logger.error(msg)
-            if attempt == retries:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Redis operation failed"
-                )
-        await asyncio.sleep(0.1)
 
 
 @app.get("/sentry-debug")
