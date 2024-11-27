@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 from my_copilotkit_remote_endpoint.utils import redis_client, redis_utils
+import redis.asyncio as redis
 
 
 safe_redis_operation = redis_utils.safe_redis_operation
@@ -35,7 +36,7 @@ sentry_sdk.init(
         "continuous_profiling_auto_start": True,
     },
 )
-app = FastAPI(redirect_slashes=False)
+app = FastAPI()
 app.add_middleware(SentryAsgiMiddleware)
 
 # For the CORS middleware
@@ -46,12 +47,8 @@ allowed_origins_prod = [
     "https://coagentserver-production.up.railway.app",
 ]
 
-allowed_origins = [
-    "http://localhost:3000",
-    "https://ai-customer-support-nine-eta.vercel.app",
-    "https://coagentserver-production.up.railway.app",
-]
-
+# CORS Middleware setup for dynamic environment matching
+allowed_origins = os.getenv('ALLOWED_ORIGINS', '*').split(',')
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -103,12 +100,15 @@ async def add_cors_headers(request: Request, call_next):
 async def health_check():
     redis_status = "up"
     try:
-        await safe_redis_operation(redis_client.ping())
-    except Exception:
+        # Attempt to connect to Redis and report status
+        result = await safe_redis_operation(redis_client.ping())
+        logger.info(f"Redis ping result: {result}")
+    except Exception as e:
         redis_status = "down"
+        logger.error(f"Redis ping failed with error: {str(e)}")
 
     return {
-        "status": "healthy",
+        "status": "healthy" if redis_status == "up" else "error",
         "redis": redis_status,
         "timestamp": datetime.datetime.now().isoformat(),
         "version": "1.0.0",
@@ -377,10 +377,20 @@ async def update_approval_status(update: ApprovalUpdate):
 # Application startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
-    """Initialize services on startup."""
-    logger.info("Starting up application...")
-    # Any additional startup tasks can go here
-    pass
+    logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
+    logger.info(f"PORT: {os.getenv('PORT')}")
+    logger.info(f"SENTRY_DSN: {os.getenv('SENTRY_DSN')}")
+    # await check_redis()
+
+
+async def check_redis():
+    try:
+        redis_client = redis.Redis(host=os.getenv("REDISHOST"), port=int(os.getenv("REDISPORT")))
+        await redis_client.ping()
+        logger.info("Redis connected successfully")
+    except Exception as e:
+        logger.error(f"Redis connection failed: {e}")
+        raise e
 
 
 @app.on_event("shutdown")
