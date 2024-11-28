@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-from utils import redis_client, redis_utils
+from my_copilotkit_remote_endpoint.utils import redis_client, redis_utils
 import redis.asyncio as redis
 from agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
 from dotenv import load_dotenv
