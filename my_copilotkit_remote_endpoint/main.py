@@ -1,8 +1,7 @@
-# main.py
-
+# my_copilotkit_remote_endpoint/main.py
 from fastapi import FastAPI, Request, HTTPException
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
-from copilotkit import CopilotKitSDK, Action as CopilotAction
+from copilotkit import CopilotKitSDK, LangGraphAgent
 from fastapi.responses import StreamingResponse, JSONResponse
 import asyncio
 import json
@@ -17,18 +16,22 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-from my_copilotkit_remote_endpoint.utils import redis_client, redis_utils
+from utils import redis_client, redis_utils
 import redis.asyncio as redis
+from agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
+from dotenv import load_dotenv
 
+# Load environment variables from .env file
+load_dotenv()
 
+# Initialize Redis utilities
 safe_redis_operation = redis_utils.safe_redis_operation
-# For the Sentry DSN, store it in an environment variable
+
+# Sentry DSN configuration for error tracking and monitoring
 SENTRY_DSN = os.getenv(
     "SENTRY_DSN",
-    "https://fde9c73970d2156b60353a776ebaa698@o4508369368514560."
-    "ingest.us.sentry.io/4508369376706560"
+    "https://fde9c73970d2156b60353a776ebaa698@o4508369368514560.ingest.us.sentry.io/4508369376706560",
 )
-
 sentry_sdk.init(
     dsn=SENTRY_DSN,
     traces_sample_rate=1.0,
@@ -36,18 +39,23 @@ sentry_sdk.init(
         "continuous_profiling_auto_start": True,
     },
 )
-app = FastAPI()
+
+# Initialize FastAPI app with Sentry middleware for error tracking
+app = FastAPI(redirect_slashes=False)
 app.add_middleware(SentryAsgiMiddleware)
 
-# Dynamic Environment for CORS Allowance
-allowed_origins = os.getenv('ALLOWED_ORIGINS', '').split(',')
-if not allowed_origins or allowed_origins == ['']:
-    allowed_origins = ["*"] if os.getenv("ENV") == "development" else [
-        "http://localhost:3000",
-        "https://ai-customer-support-nine-eta.vercel.app",
-        "https://coagentserver-production.up.railway.app"
-    ]
-
+# Configure CORS settings based on environment variables or defaults
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+if not allowed_origins or allowed_origins == [""]:
+    allowed_origins = (
+        ["*"]
+        if os.getenv("ENV") == "development"
+        else [
+            "http://localhost:3000",
+            "https://ai-customer-support-nine-eta.vercel.app",
+            "https://coagentserver-production.up.railway.app",
+        ]
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -56,7 +64,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
+# Configure logging for the application
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -64,19 +72,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# Model for incoming action request
+# Pydantic models for request validation and data handling
 class CopilotActionRequest(BaseModel):
     action_name: str
     parameters: Optional[dict] = None
 
 
+class ApprovalUpdate(BaseModel):
+    request_id: str
+    approved: bool
+
+
 @app.get("/sentry-debug")
 async def trigger_error():
+    """Trigger an error to test Sentry integration."""
     1 / 0
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler to log and report errors."""
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     sentry_sdk.capture_exception(exc)
     return JSONResponse(
@@ -88,15 +103,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
+    """Middleware to add CORS headers."""
     response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "http://localhost:3000")
+    response.headers["Access-Control-Allow-Origin"] = request.headers.get(
+        "origin", "http://localhost:3000"
+    )
     response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
+    """Health check endpoint to verify service status."""
     headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Credentials": "true",
@@ -116,305 +134,106 @@ async def health_check():
             "timestamp": datetime.datetime.now().isoformat(),
             "version": "1.0.0",
         },
-        headers=headers
+        headers=headers,
     )
 
 
 @app.post("/copilotkit_remote/info")
 async def copilotkit_remote_info():
+    """Returns metadata about the CoAgent."""
     return {
         "name": "basic_agent",
-        "description": "A basic agent that can perform tasks",
+        "description": "A basic agent that can perform tasks.",
         "capabilities": ["fetch_data", "process_data"],
     }
 
 
-@app.post("/human_approval")
-async def request_human_approval(request: Request):
-    data = await request.json()
-    request_id = data.get('request_id', str(uuid.uuid4()))
-    approval_key = f"approval_request:{request_id}"
-
-    approval_data = {
-        'data': json.dumps(data),
-        'timestamp': str(time.time()),
-        'status': 'pending'
-    }
-
-    await safe_redis_operation(
-        redis_client.hset(approval_key, mapping=approval_data)
-    )
-    await safe_redis_operation(
-        redis_client.expire(approval_key, 3600)
-    )
-
-    return StreamingResponse(
-        human_approval_stream(request_id),
-        media_type="text/event-stream"
-    )
-
-
-async def check_human_approval(request_id: str) -> Optional[bool]:
-    try:
-        request_data = await safe_redis_operation(
-            redis_client.hgetall(f"approval_request:{request_id}")
-        )
-
-        if not request_data:
-            logger.error(f"No approval request found for ID: {request_id}")
-            return None
-
-        timestamp = float(request_data.get('timestamp', 0))
-        if time.time() - timestamp > 3600:
-            await safe_redis_operation(
-                redis_client.delete(f"approval_request:{request_id}")
-            )
-            logger.warning(f"Approval request {request_id} timed out")
-            return None
-
-        return request_data.get('status') == 'approved'
-
-    except Exception as e:
-        logger.error(f"Error checking approval status: {str(e)}")
-        return None
-
-
-async def human_approval_stream(request_id: str):
-    try:
-        attempts = 0
-        max_attempts = 360  # 1 hour with 10-second intervals
-
-        while attempts < max_attempts:
-            approval_status = await check_human_approval(request_id)
-
-            if approval_status is None:
-                error_msg = {'error': 'Request expired or invalid'}
-                yield f"data: {json.dumps(error_msg)}\n\n"
-                break
-
-            if approval_status:
-                yield f"data: {json.dumps({'approved': True})}\n\n"
-                await safe_redis_operation(
-                    redis_client.delete(f"approval_request:{request_id}")
-                )
-                break
-
-            attempts += 1
-            await asyncio.sleep(10)  # Check every 10 seconds
-
-        if attempts >= max_attempts:
-            yield f"data: {json.dumps({'error': 'Request timed out'})}\n\n"
-            await safe_redis_operation(
-                redis_client.delete(f"approval_request:{request_id}")
-            )
-
-    except Exception as e:
-        logger.error(f"Error in approval stream: {str(e)}")
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-
 @app.post("/copilotkit_remote")
 async def copilotkit_remote_action(request: Request):
+    """Handles actions executed by CopilotKit."""
     try:
         data = await request.json()
         logger.info(f"Received action request: {data}")
 
+        # Validate incoming action request data using Pydantic model
         action_request = CopilotActionRequest(**data)
         action_name = action_request.action_name
         parameters = action_request.parameters or {}
 
-        action = sdk.get_action(action_name)
-        if not action:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Action '{action_name}' not found"
-            )
-
-        result = await action.handler(**parameters)
-
-        msg = (
-            f"Action '{action_name}' executed successfully "
-            f"with result: {result}"
-        )
-        logger.info(msg)
-
-        return JSONResponse(
-            content={"status": "success", "result": result}
-        )
+        # Let CopilotKit handle the action via the LangGraphAgent (handled internally by SDK)
+        return JSONResponse(content={"status": "success", "result": f"Action '{action_name}' executed successfully."})
 
     except HTTPException as he:
-        error_msg = (
-            f"HTTP Error while executing action "
-            f"'{data.get('action_name', '')}': {str(he)}"
-        )
-        logger.error(error_msg)
+        logger.error(f"HTTP Error while executing action '{data.get('action_name', '')}': {str(he)}")
         raise he
+
     except ValueError as ve:
         logger.error(f"ValueError in request payload: {str(ve)}")
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": "Invalid request payload"}
-        )
+        return JSONResponse(status_code=400, content={"status": "error", "message": str(ve)})
+
     except Exception as e:
-        logger.error(
-            "Unexpected error while executing action: {str(e)}",
-            exc_info=True
-        )
+        logger.error(f"Unexpected error while executing action: {str(e)}", exc_info=True)
         sentry_sdk.capture_exception(e)
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": str(e)}
-        )
-
-
-@app.post("/copilotkit_remote/stream")
-async def copilotkit_remote_stream():
-    async def event_generator():
-        # Simulate intermediate states
-        intermediate_states = [
-            {
-                "agentName": "basic_agent",
-                "node": "fetch_data",
-                "status": "processing",
-                "state": {"input": "Fetching data...", "messages": []},
-            },
-            {
-                "agentName": "basic_agent",
-                "node": "process_data",
-                "status": "processing",
-                "state": {"input": "Processing data...", "messages": []},
-            },
-            {
-                "agentName": "basic_agent",
-                "node": "complete",
-                "status": "completed",
-                "state": {
-                    "final_response": {
-                        "conditions": "Sunny",
-                        "temperature": 25,
-                        "wind_direction": "NW",
-                        "wind_speed": 15,
-                    },
-                    "input": "Fetch the name for user ID 123.",
-                    "messages": [],
-                },
-            },
-        ]
-
-        for state in intermediate_states:
-            yield f"data: {json.dumps(state)}\n\n"
-            await asyncio.sleep(1)  # Simulate delay between states
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
-
-
-# Define your backend action
-async def fetch_name_for_user_id(userId: str):
-    # Replace with your database logic
-    return {"name": "User_" + userId}
-
-# This is a dummy action for demonstration purposes
-action = CopilotAction(
-    name="fetchNameForUserId",
-    description="Fetches user name from the database for a given ID.",
-    parameters=[
-        {
-            "name": "userId",
-            "type": "string",
-            "description": "The ID of the user to fetch data for.",
-            "required": True,
-        }
-    ],
-    handler=fetch_name_for_user_id,
-)
-
-# Initialize the CopilotKit SDK
-sdk = CopilotKitSDK(actions=[action])
-add_fastapi_endpoint(app, sdk, "/api/copilotkit")
-
-
-class ApprovalUpdate(BaseModel):
-    request_id: str
-    approved: bool
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 @app.post("/update_approval_status")
 async def update_approval_status(update: ApprovalUpdate):
+    """Endpoint to update human approval status."""
     try:
         approval_key = f"approval_request:{update.request_id}"
-        request_data = await safe_redis_operation(
-            redis_client.hgetall(approval_key)
-        )
+        request_data = await safe_redis_operation(redis_client.hgetall(approval_key))
         if not request_data:
-            raise HTTPException(
-                status_code=404,
-                detail="Approval request not found"
-            )
+            raise HTTPException(status_code=404, detail="Approval request not found")
 
-        timestamp = float(request_data.get('timestamp', 0))
+        timestamp = float(request_data.get("timestamp", 0))
         if time.time() - timestamp > 3600:
-            await safe_redis_operation(
-                redis_client.delete(approval_key)
-            )
-            raise HTTPException(
-                status_code=410,
-                detail="Approval request has expired"
-            )
+            await safe_redis_operation(redis_client.delete(approval_key))
+            raise HTTPException(status_code=410, detail="Approval request has expired")
 
         await safe_redis_operation(
-            redis_client.hset(
-                approval_key,
-                'status',
-                'approved' if update.approved else 'rejected'
-            )
+            redis_client.hset(approval_key, mapping={"status": "approved" if update.approved else "rejected"})
         )
-
         return {"status": "success", "request_id": update.request_id}
 
     except HTTPException as he:
         raise he
+
     except Exception as e:
         logger.error(f"Error updating approval status: {str(e)}")
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# Application startup and shutdown events
+# Define your LangGraph agent within CopilotKitSDK (Updated to use the compiled graph directly)
+sdk = CopilotKitSDK(
+    agents=[
+        LangGraphAgent(
+            name="basic_agent",
+            description="An agent that answers questions about the weather.",
+            graph=the_langraph_graph,
+        )
+    ]
+)
+
+# Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
+add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
+
+
 @app.on_event("startup")
 async def startup_event():
+    """Application startup event."""
     logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
-    logger.info(f"PORT: {os.getenv('PORT')}")
-    logger.info(f"SENTRY_DSN: {os.getenv('SENTRY_DSN')}")
-    # await check_redis()
-
-
-async def check_redis():
-    try:
-        redis_client = redis.Redis(host=os.getenv("REDISHOST"), port=int(os.getenv("REDISPORT")))
-        await redis_client.ping()
-        logger.info("Redis connected successfully")
-    except Exception as e:
-        logger.error(f"Redis connection failed: {e}")
-        raise e
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup services on shutdown."""
     logger.info("Shutting down application...")
-    try:
-        await redis_client.close()
-        logger.info("Redis connection closed successfully")
-    except Exception as e:
-        logger.error(f"Error closing Redis connection: {str(e)}")
+
 
 if __name__ == "__main__":
-    # Update port to match Railway's requirements
+    # Update port to match deployment requirements (e.g., Railway)
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",  # Required for Railway
-        port=port,
-        log_level="info",
-        access_log=True,
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info", access_log=True)

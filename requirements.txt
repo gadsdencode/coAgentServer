@@ -6,4 +6,5 @@ redis
 pydantic
 pydantic-settings
 sentry-sdk
+langgraph
 
