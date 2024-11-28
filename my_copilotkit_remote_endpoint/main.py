@@ -18,7 +18,7 @@ import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 from my_copilotkit_remote_endpoint.utils import redis_client, redis_utils
 import redis.asyncio as redis
-from agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
+from my_copilotkit_remote_endpoint.agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
