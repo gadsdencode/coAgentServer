@@ -17,6 +17,7 @@ sentry-sdk = {extras = ["fastapi"], version = "^2.19.0"}
 pydantic-settings = "^2.6.1"
 pydantic = "^2.10.2"
 langgraph = "^0.2.53"
+langchain-core = "^0.3.21"
 
 
 [build-system]
