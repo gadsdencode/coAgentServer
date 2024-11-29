@@ -21,6 +21,7 @@ from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 import redis.asyncio as redis
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
 from dotenv import load_dotenv
+from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 
 # Load environment variables from .env file
 load_dotenv()
@@ -125,6 +126,67 @@ async def health_check():
     )
 
 
+@app.post("/copilotkit_remote")
+async def copilotkit_remote_action(request: Request):
+    """Handles actions executed by CopilotKit."""
+    try:
+        data = await request.json()
+        logger.info(f"Received action request: {data}")
+
+        # Validate incoming action request data using Pydantic model
+        action_request = CopilotActionRequest(**data)
+        action_name = action_request.action_name
+        parameters = action_request.parameters or {}
+
+        # Let CopilotKit handle the action via the LangGraphAgent (handled internally by SDK)
+        return JSONResponse(content={"status": "success", "result": f"Action '{action_name}' executed successfully."})
+
+    except Exception as e:
+        logger.error(f"Unexpected error in /copilotkit_remote: {e}", exc_info=True)
+        sentry_sdk.capture_exception(e)
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "Internal server error"},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+
+@app.post("/update_approval_status")
+async def update_approval_status(update: ApprovalUpdate):
+    """Endpoint to update human approval status."""
+    try:
+        approval_key = f"approval_request:{update.request_id}"
+        request_data = await safe_redis_operation(redis_client.hgetall(approval_key))
+        if not request_data:
+            raise HTTPException(status_code=404, detail="Approval request not found")
+
+        timestamp = float(request_data.get("timestamp", 0))
+        if time.time() - timestamp > 3600:
+            await safe_redis_operation(redis_client.delete(approval_key))
+            raise HTTPException(status_code=410, detail="Approval request has expired")
+
+        await safe_redis_operation(
+            redis_client.hset(approval_key, mapping={"status": "approved" if update.approved else "rejected"})
+        )
+        return {"status": "success", "request_id": update.request_id}
+
+    except HTTPException as he:
+        raise he
+
+    except Exception as e:
+        logger.error(f"Error updating approval status: {str(e)}")
+        sentry_sdk.capture_exception(e)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Initialize RedisCheckpointer
+checkpointer = RedisCheckpointer(
+    redis_host=os.getenv("REDIS_HOST", "localhost"),
+    redis_port=int(os.getenv("REDIS_PORT", 6379)),
+    redis_db=int(os.getenv("REDIS_DB", 0)),
+    redis_password=os.getenv("REDIS_PASSWORD", None)
+)
+
 # Define your LangGraph agent within CopilotKitSDK (Updated to use the compiled graph directly)
 sdk = CopilotKitSDK(
     agents=[
@@ -133,7 +195,8 @@ sdk = CopilotKitSDK(
             description="An agent that answers questions about the weather.",
             graph=the_langraph_graph,
         )
-    ]
+    ],
+    checkpointer=checkpointer,  # Integrate the checkpointer here
 )
 
 # Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
@@ -154,7 +217,6 @@ async def startup_event():
 # Shutdown Event: Close Redis Connection
 @app.on_event("shutdown")
 async def shutdown_event():
-    # Start of Selection
     """Cleanup services on shutdown."""
     logger.info("Shutting down application...")
     await safe_redis_operation(redis_client.close())
