@@ -25,6 +25,14 @@ redis_client = redis.from_url(
 )
 
 
+async def check_connection():
+    try:
+        await redis_client.ping()  # Use the ping method to check connection
+        print("Connected to Redis")
+    except Exception as e:
+        print(f"Failed to connect to Redis: {e}")
+
+
 # Add close method to properly cleanup connections
 async def close():
     await redis_client.aclose()
