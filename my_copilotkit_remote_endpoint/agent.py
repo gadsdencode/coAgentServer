@@ -141,13 +141,14 @@ def create_graph():
 
     # Add nodes and their handlers
     graph.add_node("oracle", call_oracle)
-    graph.add_node("weather_tool", ToolNode(tool=get_current_weather))
+    # Pass the tool as part of a list
+    graph.add_node("weather_tool", ToolNode([get_current_weather]))
 
     # Add edges between nodes
     graph.add_edge("oracle", "weather_tool")
     graph.add_edge("weather_tool", END)
 
-    # **Set Entry Point Properly**
+    # Set Entry Point Properly
     graph.set_entry_point("oracle")
 
     return graph.compile()
