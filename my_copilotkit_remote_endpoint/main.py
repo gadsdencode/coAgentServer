@@ -21,7 +21,7 @@ from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 import redis.asyncio as redis
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
 from dotenv import load_dotenv
-from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
+from my_copilotkit_remote_endpoint.checkpointer import InMemoryCheckpointer
 
 # Load environment variables from .env file
 load_dotenv()
@@ -179,13 +179,8 @@ async def update_approval_status(update: ApprovalUpdate):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# Initialize RedisCheckpointer
-checkpointer = RedisCheckpointer(
-    redis_host=os.getenv("REDIS_HOST", "localhost"),
-    redis_port=int(os.getenv("REDIS_PORT", 6379)),
-    redis_db=int(os.getenv("REDIS_DB", 0)),
-    redis_password=os.getenv("REDIS_PASSWORD", None)
-)
+# Initialize InMemoryCheckpointer
+checkpointer = InMemoryCheckpointer()
 
 # Initialize CopilotKitSDK without 'checkpointer'
 sdk = CopilotKitSDK(
