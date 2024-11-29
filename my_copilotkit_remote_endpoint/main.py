@@ -140,12 +140,33 @@ async def health_check():
 
 @app.post("/copilotkit_remote/info")
 async def copilotkit_remote_info():
-    """Returns metadata about the CoAgent."""
-    return {
-        "name": "basic_agent",
-        "description": "A basic agent that can perform tasks.",
-        "capabilities": ["fetch_data", "process_data"],
-    }
+    logger.info("Received request at /copilotkit_remote/info")
+    try:
+        return {
+            "actions": [
+                {
+                    "name": "sendMessage",
+                    "description": "Send a message in the chat",
+                    "parameters": [
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "description": "The message content"
+                        }
+                    ]
+                }
+            ],
+            "name": "basic_agent",
+            "description": "A basic agent that can perform tasks.",
+            "capabilities": ["fetch_data", "process_data"],
+        }
+    except Exception as e:
+        logger.error(f"Error in /copilotkit_remote/info: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "Internal server error"},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
 
 
 @app.post("/copilotkit_remote")
@@ -163,18 +184,14 @@ async def copilotkit_remote_action(request: Request):
         # Let CopilotKit handle the action via the LangGraphAgent (handled internally by SDK)
         return JSONResponse(content={"status": "success", "result": f"Action '{action_name}' executed successfully."})
 
-    except HTTPException as he:
-        logger.error(f"HTTP Error while executing action '{data.get('action_name', '')}': {str(he)}")
-        raise he
-
-    except ValueError as ve:
-        logger.error(f"ValueError in request payload: {str(ve)}")
-        return JSONResponse(status_code=400, content={"status": "error", "message": str(ve)})
-
     except Exception as e:
-        logger.error(f"Unexpected error while executing action: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error in /copilotkit_remote: {e}", exc_info=True)
         sentry_sdk.capture_exception(e)
-        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": "Internal server error"},
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
 
 
 @app.post("/update_approval_status")
@@ -224,16 +241,22 @@ add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
 async def startup_event():
     """Application startup event."""
     logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
+    try:
+        await redis_client.ping()
+        logger.info("Connected to Redis successfully.")
+    except Exception as e:
+        logger.error(f"Failed to connect to Redis on startup: {e}")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup services on shutdown."""
     logger.info("Shutting down application...")
+    await redis_client.close()
 
 
 if __name__ == "__main__":
     # Update port to match deployment requirements (e.g., Railway)
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 8080))
 
     uvicorn.run("main:app", host="0.0.0.0", port=port, log_level="info", access_log=True)
