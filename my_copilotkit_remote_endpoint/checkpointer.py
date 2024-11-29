@@ -1,36 +1,50 @@
 # /my_copilotkit_remote_endpoint/checkpointer.py
 
+import redis
 import json
 from typing import Any, Optional
 
 
-class InMemoryCheckpointer:
+class RedisCheckpointer:
     """
-    A simple in-memory checkpointer for CopilotKit.
-    Suitable for testing purposes.
+    A simple Redis-based checkpointer for CopilotKit.
     """
 
-    def __init__(self):
-        self.storage = {}
+    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379, redis_db: int = 0, redis_password: Optional[str] = None):
+        self.redis_client = redis.Redis(
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
+            password=redis_password,
+            decode_responses=True  # Ensures responses are in string format
+        )
 
     def set_state(self, key: str, state: Any) -> None:
         """
-        Persist the state in memory.
+        Persist the state in Redis.
         """
-        self.storage[key] = json.dumps(state)
+        try:
+            self.redis_client.set(key, json.dumps(state))
+        except Exception as e:
+            raise Exception(f"Failed to set state in Redis: {e}")
 
     def get_state(self, key: str) -> Optional[Any]:
         """
-        Retrieve the state from memory.
+        Retrieve the state from Redis.
         """
-        state = self.storage.get(key)
-        if state:
-            return json.loads(state)
-        return None
+        try:
+            state = self.redis_client.get(key)
+            if state:
+                return json.loads(state)
+            return None
+        except Exception as e:
+            raise Exception(f"Failed to get state from Redis: {e}")
 
     def delete_state(self, key: str) -> None:
         """
-        Delete the state from memory.
+        Delete the state from Redis.
         """
-        if key in self.storage:
-            del self.storage[key]
+        try:
+            self.redis_client.delete(key)
+        except Exception as e:
+            raise Exception(f"Failed to delete state from Redis: {e}")
