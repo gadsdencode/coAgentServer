@@ -19,9 +19,10 @@ from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
 from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 import redis.asyncio as redis
+from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraphAgent
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
 from dotenv import load_dotenv
-from my_copilotkit_remote_endpoint.checkpointer import InMemoryCheckpointer
+from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 
 # Load environment variables from .env file
 load_dotenv()
@@ -179,23 +180,25 @@ async def update_approval_status(update: ApprovalUpdate):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# Initialize InMemoryCheckpointer
-checkpointer = InMemoryCheckpointer()
+# Initialize RedisCheckpointer
+checkpointer = RedisCheckpointer(
+    redis_host=os.getenv("REDISHOST", "redis.railway.internal"),
+    redis_port=int(os.getenv("REDISPORT", 6379)),
+    redis_db=0,  # Based on REDIS_URL: redis://default:rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj@redis.railway.internal:6379
+    redis_password='rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj'  # Extracted from REDIS_URL
+)
 
-# Initialize CopilotKitSDK without 'checkpointer'
+# Initialize CopilotKitSDK with the CustomLangGraphAgent
 sdk = CopilotKitSDK(
     agents=[
-        LangGraphAgent(
+        CustomLangGraphAgent(
             name="basic_agent",
             description="An agent that answers questions about the weather.",
             graph=the_langraph_graph,
+            checkpointer=checkpointer,  # Pass the checkpointer here
         )
     ]
 )
-
-for agent in sdk.agents:
-    agent.checkpointer = checkpointer
-
 
 # Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
