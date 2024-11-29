@@ -6,7 +6,7 @@ from typing import Any
 from langgraph.graph import Graph, MessageGraph
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph
 from my_copilotkit_remote_endpoint.agent import get_current_weather
-from my_copilotkit_remote_endpoint.main import checkpointer
+from my_copilotkit_remote_endpoint.checkpointer import checkpointer
 
 
 class CustomLangGraphAgent(LangGraphAgent):
