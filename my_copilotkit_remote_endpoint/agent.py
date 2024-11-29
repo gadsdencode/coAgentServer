@@ -10,10 +10,21 @@ import json
 import re
 import requests
 from copilotkit import LangGraphAgent
+from dotenv import load_dotenv
 
 # Configure logging for the agent
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Initialize the ChatOpenAI model with the API key
+model = ChatOpenAI(
+    temperature=0,
+    streaming=True,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
 
 
 # Define tools
