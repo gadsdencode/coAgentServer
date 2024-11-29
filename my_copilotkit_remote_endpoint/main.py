@@ -16,16 +16,14 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-from my_copilotkit_remote_endpoint.utils import redis_client, redis_utils
+from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
+from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 import redis.asyncio as redis
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
 load_dotenv()
-
-# Initialize Redis utilities
-safe_redis_operation = redis_utils.safe_redis_operation
 
 # Sentry DSN configuration for error tracking and monitoring
 SENTRY_DSN = os.getenv(
@@ -89,18 +87,6 @@ async def trigger_error():
     1 / 0
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler to log and report errors."""
-    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
-    sentry_sdk.capture_exception(exc)
-    return JSONResponse(
-        status_code=500,
-        content={"status": "error", "message": str(exc)},
-        headers={"Access-Control-Allow-Origin": "*"},
-    )
-
-
 @app.middleware("http")
 async def add_cors_headers(request: Request, call_next):
     """Middleware to add CORS headers."""
@@ -121,6 +107,7 @@ async def health_check():
     }
     redis_status = "up"
     try:
+        # Use safe_redis_operation for reliable connection checking
         result = await safe_redis_operation(redis_client.ping())
         logger.info(f"Redis ping result: {result}")
     except Exception as e:
@@ -131,7 +118,7 @@ async def health_check():
         content={
             "status": "healthy" if redis_status == "up" else "error",
             "redis": redis_status,
-            "timestamp": datetime.datetime.now().isoformat(),
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
             "version": "1.0.0",
         },
         headers=headers,
@@ -242,17 +229,32 @@ async def startup_event():
     """Application startup event."""
     logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
     try:
-        await redis_client.ping()
+        await safe_redis_operation(redis_client.ping())
         logger.info("Connected to Redis successfully.")
     except Exception as e:
         logger.error(f"Failed to connect to Redis on startup: {e}")
 
 
+# Shutdown Event: Close Redis Connection
 @app.on_event("shutdown")
 async def shutdown_event():
+    # Start of Selection
     """Cleanup services on shutdown."""
     logger.info("Shutting down application...")
-    await redis_client.close()
+    await safe_redis_operation(redis_client.close())
+
+
+# Global Exception Handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler to log and report errors."""
+    logger.error(f"Unhandled exception at {request.url.path}: {str(exc)}", exc_info=True)
+    sentry_sdk.capture_exception(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "message": "Internal server error"},
+        headers={"Access-Control-Allow-Origin": "*"},
+    )
 
 
 if __name__ == "__main__":
