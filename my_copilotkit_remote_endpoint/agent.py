@@ -135,28 +135,28 @@ def call_oracle(state: List[Any]) -> List[Any]:
 
 
 # Define LangGraph nodes and edges using MessageGraph
-graph = MessageGraph()
+def create_graph():
+    graph = MessageGraph()
 
-# Add nodes and their handlers
-graph.add_node("oracle", call_oracle)
-graph.add_node("weather_tool", get_current_weather)
+    # Add nodes and their handlers
+    graph.add_node("oracle", call_oracle)
+    graph.add_node("weather_tool", get_current_weather)
 
-# Add edges between nodes
-graph.add_edge("oracle", "weather_tool")  # Oracle queries weather_tool for weather info
-graph.add_edge("weather_tool", END)      # Ends after retrieving weather info
+    # Add edges between nodes
+    graph.add_edge("oracle", "weather_tool")  # Oracle queries weather_tool for weather info
+    graph.add_edge("weather_tool", END)      # Ends after retrieving weather info
 
-# **Set Entry Point Properly**
-graph.set_entry_point("oracle")
+    # **Set Entry Point Properly**
+    graph.set_entry_point("oracle")
 
-# Compile graph into a runnable object (required by LangGraph)
-compiled_graph = graph.compile()
+    return graph.compile()
 
-# Alias compiled graph for consistent import in main.py
-the_langraph_graph = compiled_graph
+
+the_langraph_graph = create_graph()
 
 # Wrap LangGraph in a CoAgent for CopilotKit integration
 the_langraph_agent = LangGraphAgent(
     name="weather_oracle",
     description="An agent that answers questions about weather using tools.",
-    graph=compiled_graph,
+    graph=the_langraph_graph,
 )
