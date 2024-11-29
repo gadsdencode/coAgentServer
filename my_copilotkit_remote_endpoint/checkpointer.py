@@ -1,50 +1,36 @@
 # /my_copilotkit_remote_endpoint/checkpointer.py
 
-import redis
 import json
 from typing import Any, Optional
 
 
-class RedisCheckpointer:
+class InMemoryCheckpointer:
     """
-    A simple Redis-based checkpointer for CopilotKit.
+    A simple in-memory checkpointer for CopilotKit.
+    Suitable for testing purposes.
     """
 
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379, redis_db: int = 0, redis_password: Optional[str] = None):
-        self.redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            password=redis_password,
-            decode_responses=True  # Ensures responses are in string format
-        )
+    def __init__(self):
+        self.storage = {}
 
     def set_state(self, key: str, state: Any) -> None:
         """
-        Persist the state in Redis.
+        Persist the state in memory.
         """
-        try:
-            self.redis_client.set(key, json.dumps(state))
-        except Exception as e:
-            raise Exception(f"Failed to set state in Redis: {e}")
+        self.storage[key] = json.dumps(state)
 
     def get_state(self, key: str) -> Optional[Any]:
         """
-        Retrieve the state from Redis.
+        Retrieve the state from memory.
         """
-        try:
-            state = self.redis_client.get(key)
-            if state:
-                return json.loads(state)
-            return None
-        except Exception as e:
-            raise Exception(f"Failed to get state from Redis: {e}")
+        state = self.storage.get(key)
+        if state:
+            return json.loads(state)
+        return None
 
     def delete_state(self, key: str) -> None:
         """
-        Delete the state from Redis.
+        Delete the state from memory.
         """
-        try:
-            self.redis_client.delete(key)
-        except Exception as e:
-            raise Exception(f"Failed to delete state from Redis: {e}")
+        if key in self.storage:
+            del self.storage[key]
