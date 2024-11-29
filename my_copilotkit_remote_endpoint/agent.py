@@ -11,7 +11,7 @@ import re
 import requests
 from copilotkit import LangGraphAgent
 from dotenv import load_dotenv
-from langchain_core.tools import ToolNode
+from langgraph.prebuilt import ToolNode
 
 # Configure logging for the agent
 logger = logging.getLogger(__name__)
