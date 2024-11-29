@@ -184,8 +184,8 @@ async def update_approval_status(update: ApprovalUpdate):
 checkpointer = RedisCheckpointer(
     redis_host=os.getenv("REDISHOST", "redis.railway.internal"),
     redis_port=int(os.getenv("REDISPORT", 6379)),
-    redis_db=0,  # Based on REDIS_URL: redis://default:rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj@redis.railway.internal:6379
-    redis_password='rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj'  # Extracted from REDIS_URL
+    redis_db=0,
+    redis_password=os.getenv("REDIS_PASSWORD", "rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj")
 )
 
 # Initialize CopilotKitSDK with the CustomLangGraphAgent
