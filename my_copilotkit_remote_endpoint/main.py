@@ -144,7 +144,7 @@ async def copilotkit_remote_action(request: Request):
         action_name = action_request.action_name
         parameters = action_request.parameters or {}
 
-        # Let CopilotKit handle the action via the LangGraphAgent (handled internally by SDK)
+
         return JSONResponse(content={"status": "success", "result": f"Action '{action_name}' executed successfully."})
 
     except Exception as e:
@@ -212,19 +212,12 @@ checkpointer = RedisCheckpointer(
     redis_password="rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj"
 )
 
-# Initialize tools
-weather_tool = tool(
-    name="get_current_weather",
-    description="Fetches real-time weather information for a given city.",
-    func=get_current_weather
-)
-
 # Create the agent with explicit checkpointer
 agent = CustomLangGraphAgent(
     name="basic_agent",
     description="A basic agent for handling requests",
     graph=the_langraph_graph,
-    tools=[weather_tool],
+    tools=[get_current_weather],
     checkpointer=checkpointer,
 )
 
