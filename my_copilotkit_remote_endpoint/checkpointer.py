@@ -1,42 +1,39 @@
-# /my_copilotkit_remote_endpoint/checkpointer.py
+# my_copilotkit_remote_endpoint/checkpointer.py
 
 import redis
 import json
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 
 class RedisCheckpointer:
-    """
-    A simple Redis-based checkpointer for CopilotKit.
-    """
-
-    def __init__(self, redis_host: str = "localhost", redis_port: int = 6379, redis_db: int = 0, redis_password: Optional[str] = None):
+    def __init__(self, redis_host: str, redis_port: int, redis_db: int, redis_password: str):
         self.redis_client = redis.Redis(
             host=redis_host,
             port=redis_port,
             db=redis_db,
             password=redis_password,
-            decode_responses=True  # Ensures responses are in string format
+            decode_responses=True
         )
 
-    def get_state(self, key: str) -> Optional[Any]:
+    def get_state(self, key: str) -> Optional[Dict]:
+        """Required method for LangGraph checkpointing"""
         try:
-            state = self.redis_client.get(key)
-            return json.loads(state) if state else None
+            value = self.redis_client.get(key)
+            return json.loads(value) if value else None
         except Exception as e:
-            raise Exception(f"Failed to get state from Redis: {e}")
+            print(f"Error getting state: {e}")
+            return None
 
     def set_state(self, key: str, state: Any) -> None:
+        """Required method for LangGraph checkpointing"""
         try:
             self.redis_client.set(key, json.dumps(state))
         except Exception as e:
-            raise Exception(f"Failed to set state in Redis: {e}")
+            print(f"Error setting state: {e}")
 
-    def delete_state(self, key: str) -> None:
-        """
-        Delete the state from Redis.
-        """
+    def clear(self, key: str) -> None:
+        """Optional method to clear state"""
         try:
             self.redis_client.delete(key)
         except Exception as e:
-            raise Exception(f"Failed to delete state from Redis: {e}")
+            print(f"Error clearing state: {e}")

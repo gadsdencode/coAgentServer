@@ -90,14 +90,17 @@ async def trigger_error():
 
 
 @app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    """Middleware to add CORS headers."""
-    response = await call_next(request)
-    response.headers["Access-Control-Allow-Origin"] = request.headers.get(
-        "origin", "http://localhost:3000"
-    )
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    return response
+async def error_handling_middleware(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e)},
+            headers={"Access-Control-Allow-Origin": "*"}
+        )
 
 
 @app.get("/health")
@@ -180,25 +183,24 @@ async def update_approval_status(update: ApprovalUpdate):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# Initialize RedisCheckpointer
+# Initialize Redis checkpointer
 checkpointer = RedisCheckpointer(
     redis_host=os.getenv("REDISHOST", "redis.railway.internal"),
     redis_port=int(os.getenv("REDISPORT", 6379)),
     redis_db=0,
-    redis_password=os.getenv("REDIS_PASSWORD", "rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj")
+    redis_password="rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj"
+)
+
+# Create the agent with explicit checkpointer
+agent = CustomLangGraphAgent(
+    name="basic_agent",
+    description="A basic agent for handling requests",
+    graph=the_langraph_graph,
+    checkpointer=checkpointer,
 )
 
 # Initialize CopilotKitSDK with the CustomLangGraphAgent
-sdk = CopilotKitSDK(
-    agents=[
-        CustomLangGraphAgent(
-            name="basic_agent",
-            description="An agent that answers questions about the weather.",
-            graph=the_langraph_graph,
-            checkpointer=checkpointer,  # Pass the checkpointer here
-        )
-    ]
-)
+sdk = CopilotKitSDK(agents=[agent])
 
 # Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
