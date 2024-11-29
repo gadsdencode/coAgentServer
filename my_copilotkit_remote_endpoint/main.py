@@ -187,7 +187,7 @@ checkpointer = RedisCheckpointer(
     redis_password=os.getenv("REDIS_PASSWORD", None)
 )
 
-# Define your LangGraph agent within CopilotKitSDK (Updated to use the compiled graph directly)
+# Initialize CopilotKitSDK without 'checkpointer'
 sdk = CopilotKitSDK(
     agents=[
         LangGraphAgent(
@@ -195,9 +195,12 @@ sdk = CopilotKitSDK(
             description="An agent that answers questions about the weather.",
             graph=the_langraph_graph,
         )
-    ],
-    checkpointer=checkpointer,  # Integrate the checkpointer here
+    ]
 )
+
+for agent in sdk.agents:
+    agent.checkpointer = checkpointer
+
 
 # Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
