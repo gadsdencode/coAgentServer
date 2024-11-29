@@ -41,7 +41,7 @@ sentry_sdk.init(
 )
 
 # Initialize FastAPI app with Sentry middleware for error tracking
-app = FastAPI(redirect_slashes=False)
+app = FastAPI(redirect_slashes=True)
 app.add_middleware(SentryAsgiMiddleware)
 
 # Configure CORS settings based on environment variables or defaults
