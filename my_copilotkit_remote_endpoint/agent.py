@@ -158,5 +158,5 @@ the_langraph_graph = compiled_graph
 the_langraph_agent = LangGraphAgent(
     name="weather_oracle",
     description="An agent that answers questions about weather using tools.",
-    agent=compiled_graph,
+    graph=compiled_graph,
 )
