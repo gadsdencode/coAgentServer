@@ -3,7 +3,10 @@
 from copilotkit import LangGraphAgent
 from typing import Any
 # from .checkpointer import RedisCheckpointer
-from langgraph.graph import Graph
+from langgraph.graph import Graph, MessageGraph
+from my_copilotkit_remote_endpoint.agent import the_langraph_graph
+from my_copilotkit_remote_endpoint.agent import get_current_weather
+from my_copilotkit_remote_endpoint.main import checkpointer
 
 
 class CustomLangGraphAgent(LangGraphAgent):
@@ -23,3 +26,16 @@ class CustomLangGraphAgent(LangGraphAgent):
         if not hasattr(self, 'checkpointer'):
             raise ValueError("Checkpointer not properly configured")
         return super().execute(*args, **kwargs)
+
+
+graph_with_tools = the_langraph_graph.with_tools([get_current_weather])
+
+message_graph_with_tools = MessageGraph.with_tools([get_current_weather])
+
+# Then, create the agent without the tools argument
+agent = CustomLangGraphAgent(
+    name="basic_agent",
+    description="A basic agent for handling requests",
+    graph=graph_with_tools,
+    checkpointer=checkpointer,
+)
