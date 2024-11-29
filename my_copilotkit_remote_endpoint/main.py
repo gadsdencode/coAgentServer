@@ -23,7 +23,7 @@ from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraph
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph
 from dotenv import load_dotenv
 from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
-from copilotkit import Tool, tool
+from copilotkit import tool
 import requests
 
 # Load environment variables from .env file
@@ -213,7 +213,7 @@ checkpointer = RedisCheckpointer(
 )
 
 # Initialize tools
-weather_tool = Tool(
+weather_tool = tool(
     name="get_current_weather",
     description="Fetches real-time weather information for a given city.",
     func=get_current_weather
