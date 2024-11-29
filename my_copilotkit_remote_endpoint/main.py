@@ -1,16 +1,16 @@
 # my_copilotkit_remote_endpoint/main.py
 from fastapi import FastAPI, Request, HTTPException
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
-from copilotkit import CopilotKitSDK, LangGraphAgent
-from fastapi.responses import StreamingResponse, JSONResponse
-import asyncio
-import json
+from copilotkit import CopilotKitSDK
+from fastapi.responses import JSONResponse
+# import asyncio
+# import json
 import logging
 import uvicorn
 import os
 import datetime
 from typing import Optional
-import uuid
+# import uuid
 import time
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,11 +18,13 @@ import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
 from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
-import redis.asyncio as redis
+# import redis.asyncio as redis
 from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraphAgent
-from my_copilotkit_remote_endpoint.agent import the_langraph_graph  # Import the compiled LangGraph graph from agent.py
+from my_copilotkit_remote_endpoint.agent import the_langraph_graph
 from dotenv import load_dotenv
 from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
+from copilotkit import Tool, tool
+import requests
 
 # Load environment variables from .env file
 load_dotenv()
@@ -183,6 +185,25 @@ async def update_approval_status(update: ApprovalUpdate):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@tool
+def get_current_weather(city: str) -> str:
+    """Fetches real-time weather for a city."""
+    API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
+    if not API_KEY:
+        logger.error("Missing OpenWeatherMap API key.")
+        return "Weather service unavailable."
+
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        logger.info(f"Weather API response: {response.json()}")
+        # Parse and return weather information
+    except requests.RequestException as e:
+        logger.error(f"Weather API request failed: {e}")
+        return "Unable to fetch weather data."
+
+
 # Initialize Redis checkpointer
 checkpointer = RedisCheckpointer(
     redis_host=os.getenv("REDISHOST", "redis.railway.internal"),
@@ -191,11 +212,19 @@ checkpointer = RedisCheckpointer(
     redis_password="rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj"
 )
 
+# Initialize tools
+weather_tool = Tool(
+    name="get_current_weather",
+    description="Fetches real-time weather information for a given city.",
+    func=get_current_weather
+)
+
 # Create the agent with explicit checkpointer
 agent = CustomLangGraphAgent(
     name="basic_agent",
     description="A basic agent for handling requests",
     graph=the_langraph_graph,
+    tools=[weather_tool],
     checkpointer=checkpointer,
 )
 

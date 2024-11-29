@@ -1,9 +1,9 @@
 # my_copilotkit_remote_endpoint/agent.py
 from langgraph.graph import MessageGraph, END
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, FunctionMessage
+from langchain_core.messages import HumanMessage, FunctionMessage
 from langchain_core.tools import tool
-from typing import Any, Dict, List
+from typing import Any, List
 import logging
 import os
 import json
@@ -11,6 +11,7 @@ import re
 import requests
 from copilotkit import LangGraphAgent
 from dotenv import load_dotenv
+from langchain_core.tools import ToolNode
 
 # Configure logging for the agent
 logger = logging.getLogger(__name__)
@@ -140,11 +141,11 @@ def create_graph():
 
     # Add nodes and their handlers
     graph.add_node("oracle", call_oracle)
-    graph.add_node("weather_tool", get_current_weather)
+    graph.add_node("weather_tool", ToolNode(tool=get_current_weather))
 
     # Add edges between nodes
-    graph.add_edge("oracle", "weather_tool")  # Oracle queries weather_tool for weather info
-    graph.add_edge("weather_tool", END)      # Ends after retrieving weather info
+    graph.add_edge("oracle", "weather_tool")
+    graph.add_edge("weather_tool", END)
 
     # **Set Entry Point Properly**
     graph.set_entry_point("oracle")
