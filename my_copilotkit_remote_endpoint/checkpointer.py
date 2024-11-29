@@ -19,26 +19,18 @@ class RedisCheckpointer:
             decode_responses=True  # Ensures responses are in string format
         )
 
+    def get_state(self, key: str) -> Optional[Any]:
+        try:
+            state = self.redis_client.get(key)
+            return json.loads(state) if state else None
+        except Exception as e:
+            raise Exception(f"Failed to get state from Redis: {e}")
+
     def set_state(self, key: str, state: Any) -> None:
-        """
-        Persist the state in Redis.
-        """
         try:
             self.redis_client.set(key, json.dumps(state))
         except Exception as e:
             raise Exception(f"Failed to set state in Redis: {e}")
-
-    def get_state(self, key: str) -> Optional[Any]:
-        """
-        Retrieve the state from Redis.
-        """
-        try:
-            state = self.redis_client.get(key)
-            if state:
-                return json.loads(state)
-            return None
-        except Exception as e:
-            raise Exception(f"Failed to get state from Redis: {e}")
 
     def delete_state(self, key: str) -> None:
         """
