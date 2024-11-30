@@ -22,7 +22,7 @@ from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraphAgent
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph
 from dotenv import load_dotenv
-from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
+from .checkpointer import RedisCheckpointer
 from langchain.tools import tool
 import requests
 
