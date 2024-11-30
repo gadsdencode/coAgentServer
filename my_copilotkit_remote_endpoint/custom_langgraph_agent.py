@@ -76,7 +76,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         compiled = graph.compile()
         return compiled
 
-    async def execute(self, inputs: Dict[str, Any], thread_id: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    async def execute(self, inputs: Dict[str, Any], thread_id: Optional[str] = None, node_name: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Execute the agent with the given inputs"""
         if not self.graph:
             await self.setup()
@@ -86,11 +86,12 @@ class CustomLangGraphAgent(LangGraphAgent):
             if self.checkpointer and thread_id:
                 self.checkpointer.set_thread_id(thread_id)
 
+            # Ignore the node_name parameter if it's not needed
             result = await self.graph.arun(inputs, **kwargs)
             return {"result": result}
         except Exception as e:
             logger.error(f"Error executing agent: {str(e)}")
-            raise
+        raise
 
     def get_config(self) -> Dict[str, Any]:
         """Return the agent configuration"""
