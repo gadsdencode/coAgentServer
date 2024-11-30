@@ -48,13 +48,3 @@ class CustomLangGraphAgent(LangGraphAgent):
         logger.info(f"Graph has been compiled and checkpointer set: {compiled_graph.checkpointer}")
         return compiled_graph
 
-    async def execute(self, inputs: Any, **kwargs):
-        thread_id = kwargs.get('thread_id', 'default_thread')
-        # Ensure the checkpointer is set on the graph
-        if self.graph.checkpointer is None:
-            self.graph.checkpointer = self.checkpointer
-            logger.info("Checkpointer set on the graph in execute method.")
-        logger.info(f"Checkpointer in execute method: {self.graph.checkpointer}")
-        config = {"configurable": {"thread_id": thread_id}}
-        result = await self.graph.invoke(inputs, config=config)
-        return result
