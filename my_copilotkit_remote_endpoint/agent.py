@@ -71,9 +71,6 @@ def degrees_to_cardinal(degrees: float) -> str:
     return dirs[ix % 8]
 
 
-# Initialize the ChatOpenAI model
-model = ChatOpenAI(temperature=0, streaming=True)
-
 # Bind tools to the model
 model_with_tools = model.bind_tools([multiply, get_current_weather])
 
@@ -135,30 +132,56 @@ def call_oracle(state: List[Any]) -> List[Any]:
         return state
 
 
-# Define LangGraph nodes and edges using MessageGraph
 def create_graph():
+    """
+    Creates a LangGraph with integrated tools and proper flow control.
+    Returns a compiled graph with tools already configured.
+    """
     graph = MessageGraph()
 
-    # Add nodes and their handlers
+    # Create tool nodes first
+    tools = [get_current_weather]
+    tool_node = ToolNode(tools)
+
+    # Add nodes with proper configuration
     graph.add_node("oracle", call_oracle)
-    # Pass the tool as part of a list
-    graph.add_node("weather_tool", ToolNode([get_current_weather]))
+    graph.add_node("tools", tool_node)
 
-    # Add edges between nodes
-    graph.add_edge("oracle", "weather_tool")
-    graph.add_edge("weather_tool", END)
+    # Define the flow
+    graph.add_edge("oracle", "tools")
+    graph.add_edge("tools", END)
 
-    # Set Entry Point Properly
+    # Set the entry point
     graph.set_entry_point("oracle")
 
+    # Return the compiled graph with tools already integrated
     return graph.compile()
 
 
+# Create the graph once
 the_langraph_graph = create_graph()
 
-# Wrap LangGraph in a CoAgent for CopilotKit integration
-the_langraph_agent = LangGraphAgent(
-    name="weather_oracle",
-    description="An agent that answers questions about weather using tools.",
-    graph=the_langraph_graph,
-)
+
+# Create the LangGraphAgent with the compiled graph
+class WeatherAgent(LangGraphAgent):
+    def __init__(self):
+        super().__init__(
+            name="weather_oracle",
+            description="An agent that answers questions about weather using tools.",
+            graph=the_langraph_graph,
+        )
+
+    async def process_message(self, message: str):
+        """
+        Process incoming messages with proper error handling.
+        """
+        try:
+            result = await self.graph.arun(message)
+            return result
+        except Exception as e:
+            logger.error(f"Error processing message: {e}")
+            return {"error": str(e)}
+
+
+# Create a single instance of the agent
+weather_agent = WeatherAgent()

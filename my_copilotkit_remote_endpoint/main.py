@@ -132,30 +132,6 @@ async def health_check():
     )
 
 
-@app.post("/copilotkit_remote")
-async def copilotkit_remote_action(request: Request):
-    """Handles actions executed by CopilotKit."""
-    try:
-        data = await request.json()
-        logger.info(f"Received action request: {data}")
-
-        # Validate incoming action request data using Pydantic model
-        action_request = CopilotActionRequest(**data)
-        action_name = action_request.action_name
-        parameters = action_request.parameters or {}
-
-        return JSONResponse(content={"status": "success", "result": f"Action '{action_name}' executed successfully."})
-
-    except Exception as e:
-        logger.error(f"Unexpected error in /copilotkit_remote: {e}", exc_info=True)
-        sentry_sdk.capture_exception(e)
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "message": "Internal server error"},
-            headers={"Access-Control-Allow-Origin": "*"},
-        )
-
-
 @app.post("/update_approval_status")
 async def update_approval_status(update: ApprovalUpdate):
     """Endpoint to update human approval status."""
@@ -203,16 +179,14 @@ def get_current_weather(city: str) -> str:
         return "Unable to fetch weather data."
 
 
-# Create the agent with explicit checkpointer
 agent = CustomLangGraphAgent(
-    name="basic_agent",
-    description="A basic agent for handling requests",
-    graph=the_langraph_graph,
+    name="weather_agent",
+    description="An agent that provides weather information",
     tools=[get_current_weather],
-    checkpointer=checkpointer,
+    checkpointer=checkpointer
 )
 
-# Initialize CopilotKitSDK with the CustomLangGraphAgent
+# Initialize SDK with the agent
 sdk = CopilotKitSDK(agents=[agent])
 
 # Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
