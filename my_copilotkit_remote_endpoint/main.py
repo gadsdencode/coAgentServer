@@ -174,11 +174,16 @@ def get_current_weather(city: str) -> str:
         response.raise_for_status()
         logger.info(f"Weather API response: {response.json()}")
         # Parse and return weather information
+        data = response.json()
+        weather_description = data["weather"][0]["description"].capitalize()
+        temperature = data["main"]["temp"]
+        return f"The current weather in {city} is {weather_description} with a temperature of {temperature}°C."
     except requests.RequestException as e:
         logger.error(f"Weather API request failed: {e}")
         return "Unable to fetch weather data."
 
 
+# Initialize the agent with the checkpointer
 agent = CustomLangGraphAgent(
     name="weather_agent",
     description="An agent that provides weather information",

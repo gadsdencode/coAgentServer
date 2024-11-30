@@ -30,12 +30,6 @@ model = ChatOpenAI(
 
 # Define tools
 @tool
-def multiply(first_number: int, second_number: int) -> int:
-    """Multiplies two numbers together."""
-    return first_number * second_number
-
-
-@tool
 def get_current_weather(city: str) -> str:
     """Fetches current weather data for the specified city."""
     API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
@@ -72,13 +66,13 @@ def degrees_to_cardinal(degrees: float) -> str:
 
 
 # Bind tools to the model
-model_with_tools = model.bind_tools([multiply, get_current_weather])
+model_with_tools = model.bind_tools([get_current_weather])
 
 
 def extract_city(user_input: str) -> str:
     """
     Extracts the city name from the user's input.
-    Uses regex for simple extraction. For more robust extraction, integrate NLP libraries.
+    Uses regex for simple extraction.
     """
     match = re.search(r'weather in ([A-Za-z\s]+)', user_input, re.IGNORECASE)
     if match:
@@ -110,23 +104,6 @@ def call_oracle(state: List[Any]) -> List[Any]:
         response = model_with_tools.invoke([modified_message])
         logger.info(f"Model response: {response.content}")
         return state + [response]
-    elif isinstance(latest_message, FunctionMessage):
-        # Execute the tool function
-        tool_name = latest_message.additional_kwargs.get("function_call", {}).get("name", "")
-        arguments = latest_message.additional_kwargs.get("function_call", {}).get("arguments", "{}")
-        try:
-            args = json.loads(arguments)
-            if tool_name == "multiply":
-                result = multiply(**args)
-                tool_message = FunctionMessage(content=str(result), additional_kwargs={"tool_call_id": latest_message.id})
-                logger.info(f"Tool '{tool_name}' executed with result: {result}")
-                return state + [tool_message]
-            else:
-                logger.warning(f"Unknown tool '{tool_name}' requested.")
-                return state
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to decode arguments: {arguments}. Error: {e}")
-            return state
     else:
         logger.warning(f"Unhandled message type: {type(latest_message)}")
         return state
@@ -139,7 +116,7 @@ def create_graph():
     """
     graph = MessageGraph()
 
-    # Create tool nodes first
+    # Create tool nodes
     tools = [get_current_weather]
     tool_node = ToolNode(tools)
 
@@ -154,7 +131,7 @@ def create_graph():
     # Set the entry point
     graph.set_entry_point("oracle")
 
-    # Return the compiled graph with tools already integrated
+    # Return the compiled graph
     return graph.compile()
 
 
