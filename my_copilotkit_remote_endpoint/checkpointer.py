@@ -13,45 +13,37 @@ logger = logging.getLogger(__name__)
 
 class RedisCheckpointer(BaseCheckpointSaver):
     def __init__(self):
-        redis_host = os.getenv("REDISHOST", "localhost")
-        redis_port = int(os.getenv("REDISPORT", "6379"))
-        redis_db = int(os.getenv("REDIS_DB", "0"))
-        redis_password = os.getenv("REDISPASSWORD", "")
-
-        self.redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            password=redis_password if redis_password else None,
+        self.redis_client = redis.from_url(
+            os.getenv("REDIS_URL", "redis://default:rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj@redis.railway.internal:6379"),
             decode_responses=True
         )
+        logger.info("Redis checkpointer initialized")
 
-    async def get_tuple(self, thread_id: str, checkpoint_id: Optional[str] = None) -> Optional[Any]:
-        key = self._generate_key(thread_id, checkpoint_id)
+    async def get(self, key: str) -> Optional[Any]:
         try:
-            value = await self.redis_client.get(key)
-            logger.debug(f"Retrieved value from Redis for key {key}: {value}")
+            value = await self.redis_client.get(f"checkpoint:{key}")
             return json.loads(value) if value else None
         except Exception as e:
-            logger.error(f"Error getting tuple from Redis: {e}")
-            raise e
+            logger.error(f"Checkpoint get error: {str(e)}")
+            return None
 
-    async def set_tuple(self, thread_id: str, tuple_data: Any, checkpoint_id: Optional[str] = None) -> None:
-        key = self._generate_key(thread_id, checkpoint_id)
+    async def set(self, key: str, value: Any) -> None:
         try:
-            serialized_data = json.dumps(tuple_data)
-            await self.redis_client.set(key, serialized_data)
-            logger.debug(f"Set value in Redis for key {key}: {serialized_data}")
+            await self.redis_client.set(
+                f"checkpoint:{key}",
+                json.dumps(value),
+                ex=3600  # 1 hour expiration
+            )
         except Exception as e:
-            logger.error(f"Error setting tuple in Redis: {e}")
+            logger.error(f"Checkpoint set error: {str(e)}")
+            raise
 
-    async def clear(self, thread_id: str, checkpoint_id: Optional[str] = None) -> None:
-        key = self._generate_key(thread_id, checkpoint_id)
+    async def delete(self, key: str) -> None:
         try:
-            await self.redis_client.delete(key)
-            logger.debug(f"Deleted key from Redis: {key}")
+            await self.redis_client.delete(f"checkpoint:{key}")
         except Exception as e:
-            logger.error(f"Error clearing key in Redis: {e}")
+            logger.error(f"Checkpoint delete error: {str(e)}")
+            raise
 
     def _generate_key(self, thread_id: str, checkpoint_id: Optional[str] = None) -> str:
         if checkpoint_id:

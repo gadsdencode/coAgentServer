@@ -203,13 +203,18 @@ add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
 @app.on_event("startup")
 async def startup_event():
     """Application startup event."""
-    logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
+    logger.info("Starting application")
     try:
+        # Initialize Redis connection
         await safe_redis_operation(redis_client.ping())
-        logger.info("Connected to Redis successfully.")
+        logger.info("Connected to Redis successfully")
+
+        # Setup agent
+        await agent.setup()
+        logger.info("Agent setup completed")
     except Exception as e:
-        logger.error(f"Failed to connect to Redis on startup: {e}")
-    await agent.setup()
+        logger.error(f"Startup failed: {str(e)}")
+        raise
 
 
 # Lifespan event handler to replace deprecated startup/shutdown events
