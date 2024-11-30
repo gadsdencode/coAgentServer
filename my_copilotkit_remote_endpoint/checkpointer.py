@@ -16,7 +16,6 @@ class RedisCheckpointer:
         )
 
     def get_state(self, key: str) -> Optional[Dict]:
-        """Required method for LangGraph checkpointing"""
         try:
             value = self.redis_client.get(key)
             return json.loads(value) if value else None
@@ -25,15 +24,22 @@ class RedisCheckpointer:
             return None
 
     def set_state(self, key: str, state: Any) -> None:
-        """Required method for LangGraph checkpointing"""
         try:
             self.redis_client.set(key, json.dumps(state))
         except Exception as e:
             print(f"Error setting state: {e}")
 
     def clear(self, key: str) -> None:
-        """Optional method to clear state"""
         try:
             self.redis_client.delete(key)
         except Exception as e:
             print(f"Error clearing state: {e}")
+
+
+# Create the checkpointer instance
+checkpointer = RedisCheckpointer(
+    redis_host="redis.railway.internal",
+    redis_port=6379,
+    redis_db=0,
+    redis_password="rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj"
+)
