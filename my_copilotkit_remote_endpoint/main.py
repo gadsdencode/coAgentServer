@@ -3,7 +3,6 @@ from fastapi import FastAPI, Request, HTTPException
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 from copilotkit import CopilotKitSDK
 from fastapi.responses import JSONResponse
-import asyncio
 # import json
 import logging
 import uvicorn
