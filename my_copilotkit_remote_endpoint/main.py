@@ -22,7 +22,7 @@ from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraphAgent
 from my_copilotkit_remote_endpoint.agent import the_langraph_graph
 from dotenv import load_dotenv
-from .checkpointer import RedisCheckpointer
+from my_copilotkit_remote_endpoint.checkpointer import checkpointer
 from langchain.tools import tool
 import requests
 
@@ -144,7 +144,6 @@ async def copilotkit_remote_action(request: Request):
         action_name = action_request.action_name
         parameters = action_request.parameters or {}
 
-
         return JSONResponse(content={"status": "success", "result": f"Action '{action_name}' executed successfully."})
 
     except Exception as e:
@@ -203,14 +202,6 @@ def get_current_weather(city: str) -> str:
         logger.error(f"Weather API request failed: {e}")
         return "Unable to fetch weather data."
 
-
-# Initialize Redis checkpointer
-checkpointer = RedisCheckpointer(
-    redis_host=os.getenv("REDISHOST", "redis.railway.internal"),
-    redis_port=int(os.getenv("REDISPORT", 6379)),
-    redis_db=0,
-    redis_password="rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj"
-)
 
 # Create the agent with explicit checkpointer
 agent = CustomLangGraphAgent(
