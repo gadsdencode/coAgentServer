@@ -12,6 +12,7 @@ import requests
 from copilotkit import LangGraphAgent
 from dotenv import load_dotenv
 from langgraph.prebuilt import ToolNode
+from my_copilotkit_remote_endpoint.checkpointer import Checkpointer
 
 # Configure logging for the agent
 logger = logging.getLogger(__name__)
@@ -146,6 +147,8 @@ class WeatherAgent(LangGraphAgent):
             name="weather_oracle",
             description="An agent that answers questions about weather using tools.",
             graph=the_langraph_graph,
+            checkpointer=Checkpointer(),
+            tools=[get_current_weather]
         )
 
     async def process_message(self, message: str):
