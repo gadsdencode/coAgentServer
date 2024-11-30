@@ -40,11 +40,15 @@ class CustomLangGraphAgent(LangGraphAgent):
         # Set entry point
         graph.set_entry_point("tool_executor")
 
-        logger.info("Graph with tools has been created.")
-        # Compile the graph without passing the checkpointer
-        compiled_graph = graph.compile()
-        # Set the checkpointer directly on the compiled graph
-        compiled_graph.checkpointer = self.checkpointer
-        logger.info(f"Graph has been compiled and checkpointer set: {compiled_graph.checkpointer}")
-        return compiled_graph
+        # Set the checkpointer on the graph before compiling
+        graph.checkpointer = self.checkpointer
+        logger.info("Graph with tools has been created and checkpointer set.")
 
+        # Compile the graph
+        compiled_graph = graph.compile()
+
+        # Ensure the compiled graph retains the checkpointer
+        compiled_graph.checkpointer = self.checkpointer
+        logger.info(f"Graph has been compiled and checkpointer set on compiled graph: {compiled_graph.checkpointer}")
+
+        return compiled_graph

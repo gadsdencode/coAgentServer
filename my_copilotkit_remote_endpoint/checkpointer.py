@@ -5,12 +5,13 @@ import json
 from typing import Any, Optional
 import os
 import logging
-from langgraph.checkpoint.base import Checkpoint
+# from langgraph.checkpoint.base import Checkpoint
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 logger = logging.getLogger(__name__)
 
 
-class RedisCheckpointer(Checkpoint):
+class RedisCheckpointer(BaseCheckpointSaver):
     def __init__(self):
         redis_host = os.getenv("REDISHOST", "localhost")
         redis_port = int(os.getenv("REDISPORT", "6379"))
