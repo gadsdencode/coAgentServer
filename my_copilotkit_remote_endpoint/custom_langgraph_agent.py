@@ -5,6 +5,7 @@ from typing import Any, List
 from langgraph.graph import Graph, MessageGraph, END
 from langgraph.prebuilt import ToolNode
 import logging
+from my_copilotkit_remote_endpoint.checkpointer import checkpointer
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         name: str,
         description: str,
         tools: List[Any],
-        checkpointer: Any = None,
+        checkpointer: Any = checkpointer,
     ):
         self.tools = tools
         self.checkpointer = checkpointer
