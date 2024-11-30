@@ -19,11 +19,14 @@ from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
 from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 # import redis.asyncio as redis
 from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraphAgent
-from my_copilotkit_remote_endpoint.agent import the_langraph_graph
+# from my_copilotkit_remote_endpoint.agent import the_langraph_graph
 from dotenv import load_dotenv
 from my_copilotkit_remote_endpoint.checkpointer import checkpointer
 from langchain.tools import tool
 import requests
+from typing import Any, List
+from contextlib import asynccontextmanager
+from copilotkit import LangGraphAgent
 
 # Load environment variables from .env file
 load_dotenv()
@@ -182,21 +185,18 @@ def get_current_weather(city: str) -> str:
         return "Unable to fetch weather data."
 
 
-pass
-
-
 # Initialize the agent with the checkpointer
 agent = CustomLangGraphAgent(
     name="weather_agent",
     description="An agent that provides weather information",
     tools=[get_current_weather],
-    checkpointer=checkpointer
+    checkpointer=checkpointer,
 )
 
 # Initialize SDK with the agent
 sdk = CopilotKitSDK(agents=[agent])
 
-# Add the CopilotKit endpoint to your FastAPI app for CoAgent integration.
+# Add the CopilotKit endpoint to your FastAPI app
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
 
 
@@ -212,25 +212,43 @@ async def startup_event():
     await agent.setup()
 
 
-# Shutdown Event: Close Redis Connection
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup services on shutdown."""
-    logger.info("Shutting down application...")
-    await safe_redis_operation(redis_client.close())
+# Lifespan event handler to replace deprecated startup/shutdown events
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
+    try:
+        # Startup logic
+        await safe_redis_operation(redis_client.ping())
+        logger.info("Connected to Redis successfully.")
+        await agent.setup()  # Assuming setup is required for initializing
+        yield
+    except Exception as e:
+        logger.error(f"Failed during startup: {e}")
+        yield
+    finally:
+        # Shutdown logic
+        logger.info("Shutting down application...")
+        await safe_redis_operation(redis_client.close())
+
+# Set the lifespan handler for the app
+app.router.lifespan = lifespan
 
 
-# Global Exception Handler
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler to log and report errors."""
-    logger.error(f"Unhandled exception at {request.url.path}: {str(exc)}", exc_info=True)
-    sentry_sdk.capture_exception(exc)
-    return JSONResponse(
-        status_code=500,
-        content={"status": "error", "message": "Internal server error"},
-        headers={"Access-Control-Allow-Origin": "*"},
-    )
+# Add the required method to CustomLangGraphAgent
+class CustomLangGraphAgent(LangGraphAgent):
+    def __init__(self, name: str, description: str, tools: List[Any], checkpointer: Any):
+        self.tools = tools
+        self.checkpointer = checkpointer
+        logger.info(f"Checkpointer in __init__: {self.checkpointer}")
+        # Create the graph with tools synchronously
+        graph = self.create_graph_with_tools()
+        # Initialize the base agent with the created graph
+        super().__init__(name=name, description=description, graph=graph)
+        logger.info("Agent initialized.")
+
+    async def setup(self):
+        """Placeholder setup method."""
+        logger.info("Running agent setup...")
 
 
 if __name__ == "__main__":

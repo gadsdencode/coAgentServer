@@ -1,4 +1,4 @@
-# custom_langgraph_agent.py
+# my_copilotkit_remote_endpoint/custom_langgraph_agent.py
 
 from copilotkit import LangGraphAgent
 from typing import Any, List
@@ -20,18 +20,14 @@ class CustomLangGraphAgent(LangGraphAgent):
         self.tools = tools
         self.checkpointer = checkpointer
         logger.info(f"Checkpointer in __init__: {self.checkpointer}")
-        # Initialize without the graph
-        super().__init__(name=name, description=description, graph=None)
+        # Create the graph with tools synchronously
+        graph = self.create_graph_with_tools()
+        # Initialize the base agent with the created graph
+        super().__init__(name=name, description=description, graph=graph)
         logger.info("Agent initialized.")
 
-    async def setup(self):
-        # Create and compile the graph asynchronously
-        graph = await self.create_graph_with_tools()
-        # Set the graph in the agent
-        self.graph = graph
-
-    async def create_graph_with_tools(self) -> Graph:
-        """Create a new graph with tools properly integrated."""
+    def create_graph_with_tools(self) -> Graph:
+        """Create and compile a new graph with tools properly integrated."""
         graph = MessageGraph()
 
         # Add tool node with the tools
@@ -48,8 +44,8 @@ class CustomLangGraphAgent(LangGraphAgent):
         graph.checkpointer = self.checkpointer
         logger.info("Graph with tools has been created and checkpointer set.")
 
-        # Compile the graph
-        compiled_graph = await graph.compile()
+        # Compile the graph synchronously
+        compiled_graph = graph.compile()
 
         # Ensure the compiled graph retains the checkpointer
         compiled_graph.checkpointer = self.checkpointer
