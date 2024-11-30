@@ -26,7 +26,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         super().__init__(name=name, description=description, graph=graph)
         logger.info("Agent initialized.")
 
-    def create_graph_with_tools(self) -> Graph:
+    async def create_graph_with_tools(self) -> Graph:
         """Create a new graph with tools properly integrated."""
         graph = MessageGraph()
 
@@ -45,7 +45,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         logger.info("Graph with tools has been created and checkpointer set.")
 
         # Compile the graph
-        compiled_graph = graph.compile()
+        compiled_graph = await graph.compile()
 
         # Ensure the compiled graph retains the checkpointer
         compiled_graph.checkpointer = self.checkpointer
