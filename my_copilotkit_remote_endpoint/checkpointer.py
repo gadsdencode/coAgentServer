@@ -61,3 +61,4 @@ class RedisCheckpointer(Checkpoint):
 
 # Instantiate the checkpointer
 checkpointer = RedisCheckpointer()
+logger.info(f"Checkpointer instance created: {checkpointer}")
