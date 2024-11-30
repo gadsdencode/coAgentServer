@@ -3,15 +3,16 @@
 import redis
 import json
 from typing import Any, Optional, Dict
+import os
 
 
 class RedisCheckpointer:
-    def __init__(self, redis_host: str, redis_port: int, redis_db: int, redis_password: str):
+    def __init__(self):
         self.redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            password=redis_password,
+            host=os.getenv("REDISHOST"),
+            port=int(os.getenv("REDISPORT")),
+            db=int(os.getenv("REDIS_DB")),
+            password=os.getenv("REDISPASSWORD"),
             decode_responses=True
         )
 
@@ -21,7 +22,7 @@ class RedisCheckpointer:
             return json.loads(value) if value else None
         except Exception as e:
             print(f"Error getting state: {e}")
-            return None
+            raise e
 
     def set_state(self, key: str, state: Any) -> None:
         try:
@@ -37,9 +38,4 @@ class RedisCheckpointer:
 
 
 # Create the checkpointer instance
-checkpointer = RedisCheckpointer(
-    redis_host="redis.railway.internal",
-    redis_port=6379,
-    redis_db=0,
-    redis_password="rYmCyqyBGrLhLYssKqlGzboYjmiaNZQj"
-)
+checkpointer = RedisCheckpointer()
