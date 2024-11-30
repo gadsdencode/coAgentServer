@@ -3,7 +3,6 @@ from fastapi import FastAPI, Request, HTTPException
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
 from copilotkit import CopilotKitSDK
 from fastapi.responses import JSONResponse
-# import asyncio
 # import json
 import logging
 import uvicorn
@@ -183,6 +182,9 @@ def get_current_weather(city: str) -> str:
         return "Unable to fetch weather data."
 
 
+pass
+
+
 # Initialize the agent with the checkpointer
 agent = CustomLangGraphAgent(
     name="weather_agent",
@@ -207,6 +209,7 @@ async def startup_event():
         logger.info("Connected to Redis successfully.")
     except Exception as e:
         logger.error(f"Failed to connect to Redis on startup: {e}")
+    await agent.setup()
 
 
 # Shutdown Event: Close Redis Connection
