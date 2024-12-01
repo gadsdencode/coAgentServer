@@ -126,13 +126,14 @@ agent = CustomLangGraphAgent(
     name="weather_agent",
     description="An agent that provides weather information",
     tools=[get_current_weather],
-    checkpointer=checkpointer
+    checkpointer=checkpointer,
+    model=model
 )
-logger.info("Created agent with checkpointer")
+logger.info(f"Created agent with checkpointer {checkpointer} and model {model}.")
 
 # Initialize SDK with the agent
 sdk = CopilotKitSDK(agents=[agent])
-logger.info("Initialized CopilotKit SDK")
+logger.info(f"Initialized CopilotKit SDK with agent {agent}.")
 
 # Add the CopilotKit endpoint
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
