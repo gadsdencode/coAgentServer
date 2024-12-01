@@ -63,63 +63,48 @@ class CustomLangGraphAgent(LangGraphAgent):
 
         logger.info(f"Initializing CustomLangGraphAgent: {name}")
 
-    async def setup(self) -> None:
-        """Initialize the agent if needed"""
-        logger.info(f"Running agent setup for {self.name}...")
-        # No need to recreate graph since it's already created in __init__
-        pass
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the agent with the given inputs.
 
-    async def _create_graph(self) -> Graph:
-        """Create and configure the graph with proper async support"""
-        graph = MessageGraph()
+        Args:
+            inputs: Dictionary containing the input parameters
 
-        # Create and add tool node
-        tool_node = ToolNode(
-            tools=self.tools,
-            name=f"{self.name}_tools"
-        )
-        graph.add_node("tools", tool_node)
-        graph.add_edge("tools", END)
-
-        # Configure graph settings
-        graph.set_entry_point("tools")
-        if self.checkpointer:
-            graph.checkpointer = self.checkpointer
-
-        return graph.compile()
-
-    async def execute(
-        self,
-        inputs: Dict[str, Any],
-        thread_id: Optional[str] = None,
-        node_name: Optional[str] = None,
-        **kwargs
-    ) -> Dict[str, Any]:
-        """Execute the agent with the given inputs"""
-        if not self.graph:
-            try:
-                await self.setup()
-            except Exception as e:
-                error_msg = f"Failed to initialize agent graph: {str(e)}"
-                logger.error(error_msg)
-                raise RuntimeError(error_msg)
-
+        Returns:
+            Dict containing the execution results
+        """
         try:
-            # Set thread_id if provided
-            if self.checkpointer and thread_id:
-                self.checkpointer.set_thread_id(thread_id)
+            # Extract the actual input from the inputs dictionary
+            input_str = inputs.get("inputs", "")
+            if not input_str:
+                raise ValueError("No input provided")
 
-            # Ensure inputs is a dictionary
-            if not isinstance(inputs, dict):
-                inputs = {"input": inputs}
+            # Convert to the format expected by the graph
+            input_dict = {"input": input_str}
 
-            # Execute graph
-            result = await self.graph.arun(inputs, **kwargs)
-            return result
+            # Execute the graph with the inputs
+            result = await self.graph.arun(input_dict)
+
+            # Format the result
+            if isinstance(result, dict):
+                return result
+            return {"output": str(result)}
+
         except Exception as e:
             error_msg = f"Error executing agent: {str(e)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
+
+    async def process_message(self, message: str) -> Dict[str, Any]:
+        """Process a single message through the agent.
+
+        This is a convenience method for handling simple string inputs.
+        """
+        return await self.execute({"inputs": message})
+
+    async def setup(self) -> None:
+        """Initialize the agent if needed"""
+        logger.info(f"Running agent setup for {self.name}...")
+        pass  # Graph is already created in __init__
 
     def get_config(self) -> Dict[str, Any]:
         """Return the agent configuration"""
