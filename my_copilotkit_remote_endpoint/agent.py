@@ -186,14 +186,13 @@ def create_graph():
 
 
 class WeatherAgent(LangGraphAgent):
-    def __init__(self, thread_id: str):
+    def __init__(self):
         super().__init__(
             name="weather_oracle",
             description="An agent that provides weather information with state management",
             graph=create_graph(),
             checkpointer=RedisCheckpointer(ttl=3600),
             tools=[get_current_weather],
-            thread_id=thread_id
         )
 
     async def process_message(self, message: str) -> Dict[str, Any]:
@@ -203,8 +202,7 @@ class WeatherAgent(LangGraphAgent):
         try:
             result = await self.graph.arun({
                 "messages": [HumanMessage(content=message)],
-                "session_id": session_id,
-                "thread_id": self.thread_id
+                "session_id": session_id
             })
 
             # Extract the final message
@@ -213,22 +211,19 @@ class WeatherAgent(LangGraphAgent):
                 if isinstance(final_message, AIMessage):
                     return {
                         "response": final_message.content,
-                        "session_id": session_id,
-                        "thread_id": self.thread_id
+                        "session_id": session_id
                     }
 
             return {
                 "response": str(result),
-                "session_id": session_id,
-                "thread_id": self.thread_id
+                "session_id": session_id
             }
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
             return {
                 "error": str(e),
-                "session_id": session_id,
-                "thread_id": self.thread_id
+                "session_id": session_id
             }
 
 
