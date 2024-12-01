@@ -118,6 +118,7 @@ async def get_current_weather(city: str) -> str:
 
 # Initialize checkpointer
 checkpointer = RedisCheckpointer()
+logger.info("Initialized Redis checkpointer")
 
 # Create the agent
 agent = CustomLangGraphAgent(
@@ -126,12 +127,15 @@ agent = CustomLangGraphAgent(
     tools=[get_current_weather],
     checkpointer=checkpointer
 )
+logger.info("Created agent with checkpointer")
 
 # Initialize SDK with the agent
 sdk = CopilotKitSDK(agents=[agent])
+logger.info("Initialized CopilotKit SDK")
 
 # Add the CopilotKit endpoint
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
+logger.info("Added CopilotKit endpoint")
 
 
 @app.get("/health")

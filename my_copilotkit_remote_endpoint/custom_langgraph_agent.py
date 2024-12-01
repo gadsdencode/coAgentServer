@@ -37,14 +37,21 @@ class CustomLangGraphAgent(LangGraphAgent):
 
         # Set checkpointer if provided
         if checkpointer:
+            # Ensure checkpointer is set on the graph itself
             graph.checkpointer = checkpointer
+            logger.info(f"Set checkpointer on graph for agent {name}")
+
+        # Compile graph
+        compiled_graph = graph.compile()
 
         # Initialize with compiled graph
         super().__init__(
             name=name,
             description=description,
-            graph=graph.compile()
+            graph=compiled_graph,
+            checkpointer=checkpointer  # Explicitly pass checkpointer to parent
         )
 
         self.tools = tools
         self.checkpointer = checkpointer
+        logger.info(f"Initialized agent {name} with checkpointer")
