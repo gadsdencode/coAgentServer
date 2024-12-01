@@ -28,6 +28,9 @@ class CustomLangGraphAgent(LangGraphAgent):
         tools: List[BaseTool],
         checkpointer: Any,
     ):
+        # Call the parent class's __init__ first
+        super().__init__()
+
         self.name = name
         self.description = description
         self.tools = tools
@@ -79,19 +82,28 @@ class CustomLangGraphAgent(LangGraphAgent):
     async def execute(self, inputs: Dict[str, Any], thread_id: Optional[str] = None, node_name: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         """Execute the agent with the given inputs"""
         if not self.graph:
-            await self.setup()
+            try:
+                await self.setup()
+            except Exception as e:
+                logger.error(f"Failed to setup graph: {str(e)}")
+                raise RuntimeError(f"Failed to initialize agent graph: {str(e)}")
 
         try:
             # If a thread_id is provided, set it in the checkpointer context
             if self.checkpointer and thread_id:
                 self.checkpointer.set_thread_id(thread_id)
 
-            # Ignore the node_name parameter if it's not needed
+            # Ensure inputs is a dictionary
+            if not isinstance(inputs, dict):
+                inputs = {"input": inputs}
+
+            # Execute the graph with the inputs
             result = await self.graph.arun(inputs, **kwargs)
-            return {"result": result}
+            return result  # Return the raw result without wrapping
         except Exception as e:
-            logger.error(f"Error executing agent: {str(e)}")
-        raise
+            error_msg = f"Error executing agent: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
     def get_config(self) -> Dict[str, Any]:
         """Return the agent configuration"""
