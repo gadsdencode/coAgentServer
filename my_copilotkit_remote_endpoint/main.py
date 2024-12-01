@@ -105,6 +105,43 @@ class ApprovalUpdate(BaseModel):
     approved: bool
 
 
+@tool
+def get_current_weather(city: str) -> str:
+    """Fetches real-time weather for a city."""
+    API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
+    if not API_KEY:
+        logger.error("Missing OpenWeatherMap API key.")
+        return "Weather service unavailable."
+
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        logger.info(f"Weather API response: {response.json()}")
+        # Parse and return weather information
+        data = response.json()
+        weather_description = data["weather"][0]["description"].capitalize()
+        temperature = data["main"]["temp"]
+        return f"The current weather in {city} is {weather_description} with a temperature of {temperature}°C."
+    except requests.RequestException as e:
+        logger.error(f"Weather API request failed: {e}")
+        return "Unable to fetch weather data."
+
+
+agent = CustomLangGraphAgent(
+    name="weather_agent",
+    description="An agent that provides weather information",
+    tools=[get_current_weather],
+    checkpointer=checkpointer,
+)
+
+# Initialize SDK with the agent
+sdk = CopilotKitSDK(agents=[agent])
+
+# Add the CopilotKit endpoint to your FastAPI app
+add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
+
+
 @app.get("/sentry-debug")
 async def trigger_error():
     """Trigger an error to test Sentry integration."""
@@ -178,44 +215,6 @@ async def update_approval_status(update: ApprovalUpdate):
         logger.error(f"Error updating approval status: {str(e)}")
         sentry_sdk.capture_exception(e)
         raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@tool
-def get_current_weather(city: str) -> str:
-    """Fetches real-time weather for a city."""
-    API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
-    if not API_KEY:
-        logger.error("Missing OpenWeatherMap API key.")
-        return "Weather service unavailable."
-
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-        logger.info(f"Weather API response: {response.json()}")
-        # Parse and return weather information
-        data = response.json()
-        weather_description = data["weather"][0]["description"].capitalize()
-        temperature = data["main"]["temp"]
-        return f"The current weather in {city} is {weather_description} with a temperature of {temperature}°C."
-    except requests.RequestException as e:
-        logger.error(f"Weather API request failed: {e}")
-        return "Unable to fetch weather data."
-
-
-# Initialize the agent with the checkpointer
-agent = CustomLangGraphAgent(
-    name="weather_agent",
-    description="An agent that provides weather information",
-    tools=[get_current_weather],
-    checkpointer=checkpointer,
-)
-
-# Initialize SDK with the agent
-sdk = CopilotKitSDK(agents=[agent])
-
-# Add the CopilotKit endpoint to your FastAPI app
-add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
 
 
 @app.on_event("startup")

@@ -7,6 +7,8 @@ from langgraph.prebuilt import ToolNode
 import logging
 from langchain.tools import BaseTool
 from pydantic import BaseModel
+from langchain_core.messages import HumanMessage, AIMessage
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +23,27 @@ class LangGraphConfig(BaseModel):
 
 
 class CustomLangGraphAgent(LangGraphAgent):
+    """
+    A custom LangGraph agent implementation that handles tool execution and state management.
+    """
+
     def __init__(
         self,
         name: str,
         description: str,
         tools: List[BaseTool],
-        checkpointer: Any,
+        checkpointer: Optional[Any] = None
     ):
-        # Create the initial graph
+        # Create the graph with proper message handling
         graph = MessageGraph()
+
+        # Configure tool node with provided tools
         tool_node = ToolNode(
             tools=tools,
             name=f"{name}_tools"
         )
+
+        # Add nodes and configure graph flow
         graph.add_node("tools", tool_node)
         graph.add_edge("tools", END)
         graph.set_entry_point("tools")
@@ -41,86 +51,58 @@ class CustomLangGraphAgent(LangGraphAgent):
         if checkpointer:
             graph.checkpointer = checkpointer
 
-        compiled_graph = graph.compile()
-
-        # Initialize parent class with all required parameters
+        # Initialize base class with compiled graph
         super().__init__(
             name=name,
             description=description,
-            graph=compiled_graph
+            graph=graph.compile()
         )
 
         self.tools = tools
         self.checkpointer = checkpointer
-        self.graph = compiled_graph
 
-        # Configure the agent
-        self.langgraph_config = LangGraphConfig(
-            name=name,
-            description=description,
-            tools=tools
-        )
-
-        logger.info(f"Initializing CustomLangGraphAgent: {name}")
-
-    async def execute(self, inputs: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-        """Execute the agent with the given inputs.
-
-        Args:
-            inputs: Dictionary containing the input parameters
-            **kwargs: Additional keyword arguments passed by CopilotKit
-
-        Returns:
-            Dict containing the execution results
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute the agent with provided inputs and state management
         """
         try:
-            # Handle thread_id if provided
-            thread_id = kwargs.get("thread_id")
-            if thread_id and self.checkpointer:
-                self.checkpointer.set_thread_id(thread_id)
+            # Generate session ID for state tracking
+            session_id = str(uuid.uuid4())
 
-            # Extract the actual input from the inputs dictionary
-            input_str = inputs.get("inputs", "")
-            if not input_str:
-                raise ValueError("No input provided")
+            # Format messages
+            if isinstance(inputs, str):
+                messages = [HumanMessage(content=inputs)]
+            elif isinstance(inputs, dict):
+                messages = inputs.get("messages", [HumanMessage(content=str(inputs))])
+            else:
+                messages = [HumanMessage(content=str(inputs))]
 
-            # Convert to the format expected by the graph
-            input_dict = {"input": input_str}
+            # Execute graph with state management
+            result = await self.graph.arun({
+                "messages": messages,
+                "session_id": session_id
+            })
 
-            # Execute the graph with the inputs
-            result = await self.graph.arun(input_dict)
+            # Extract and format response
+            if isinstance(result, dict) and "messages" in result:
+                final_message = result["messages"][-1]
+                if isinstance(final_message, AIMessage):
+                    return {
+                        "output": final_message.content,
+                        "session_id": session_id
+                    }
 
-            # Format the result
-            if isinstance(result, dict):
-                return result
-            return {"output": str(result)}
+            return {
+                "output": str(result),
+                "session_id": session_id
+            }
 
         except Exception as e:
-            error_msg = f"Error executing agent: {str(e)}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
-
-    async def process_message(self, message: str) -> Dict[str, Any]:
-        """Process a single message through the agent.
-
-        This is a convenience method for handling simple string inputs.
-        """
-        return await self.execute({"inputs": message})
+            logger.error(f"Error executing agent: {e}")
+            return {"error": str(e)}
 
     async def setup(self) -> None:
-        """Initialize the agent if needed"""
-        logger.info(f"Running agent setup for {self.name}...")
-        pass  # Graph is already created in __init__
-
-    def get_config(self) -> Dict[str, Any]:
-        """Return the agent configuration"""
-        return self.langgraph_config.dict()
-
-    async def cleanup(self) -> None:
-        """Cleanup resources"""
+        """Initialize any required resources"""
+        logger.info(f"Setting up agent: {self.name}")
         if self.checkpointer:
-            try:
-                await self.checkpointer.delete(f"{self.name}_state")
-            except Exception as e:
-                error_msg = f"Error cleaning up agent: {str(e)}"
-                logger.error(error_msg)
+            await self.checkpointer.setup()
