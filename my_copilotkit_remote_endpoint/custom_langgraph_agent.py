@@ -6,11 +6,8 @@ from langgraph.graph import MessageGraph, END
 from langgraph.prebuilt import ToolNode
 import logging
 from langchain.tools import BaseTool
-from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 
 logger = logging.getLogger(__name__)
-
-checkpointer = RedisCheckpointer()
 
 
 class CustomLangGraphAgent(LangGraphAgent):
@@ -27,34 +24,37 @@ class CustomLangGraphAgent(LangGraphAgent):
         model: Any,
         checkpointer: Any = None
     ):
-        # Create graph structure
+        # Create the message graph
         graph = MessageGraph()
 
-        # Add tool node
+        # Add a tool node with the provided tools
         tool_node = ToolNode(
             tools=tools,
             name=f"{name}_tools"
         )
         graph.add_node("tools", tool_node)
-        graph.add_edge("tools", END)
+        graph.add_edge("tools", END)  # Define the flow of the graph
         graph.set_entry_point("tools")
 
-        # Compile graph
+        # Compile the graph into an executable form
         compiled_graph = graph.compile()
 
-        # Set checkpointer on compiled graph
+        # **Set the language model on the compiled graph**
+        compiled_graph.provider = model
+        logger.info(f"Set language model on compiled graph for agent {name}")
+
+        # **Assign the checkpointer to the compiled graph if provided**
         if checkpointer:
             compiled_graph.checkpointer = checkpointer
             logger.info(f"Set checkpointer on compiled graph for agent {name}")
 
-        # Initialize parent with compiled graph
+        # Initialize the LangGraphAgent with the compiled graph
         super().__init__(
             name=name,
             description=description,
-            graph=compiled_graph,
-            model=model
+            graph=compiled_graph
         )
 
-        # Store tools for reference
+        # Store the tools for future reference
         self.tools = tools
-        logger.info(f"Initialized agent {name} with {len(tools)} tools and model {model}.")
+        logger.info(f"Initialized agent {name} with {len(tools)} tools.")
