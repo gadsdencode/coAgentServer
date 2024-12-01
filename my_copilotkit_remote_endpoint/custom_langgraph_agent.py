@@ -28,8 +28,8 @@ class CustomLangGraphAgent(LangGraphAgent):
         tools: List[BaseTool],
         checkpointer: Any,
     ):
-        # Call the parent class's __init__ first
-        super().__init__()
+        # Initialize parent class
+        super().__init__(name=name)
 
         self.name = name
         self.description = description
@@ -37,7 +37,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         self.checkpointer = checkpointer
         self.graph = None
 
-        # Add the required langgraph_config attribute
+        # Configure the agent
         self.langgraph_config = LangGraphConfig(
             name=name,
             description=description,
@@ -52,44 +52,47 @@ class CustomLangGraphAgent(LangGraphAgent):
             self.graph = await self._create_graph()
             logger.info(f"Graph created successfully for agent: {self.name}")
         except Exception as e:
-            logger.error(f"Failed to create graph: {str(e)}")
-            raise
+            error_msg = f"Failed to create graph: {str(e)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
     async def _create_graph(self) -> Graph:
         """Create and configure the graph with proper async support"""
         graph = MessageGraph()
 
-        # Create nodes
+        # Create and add tool node
         tool_node = ToolNode(
             tools=self.tools,
             name=f"{self.name}_tools"
         )
-
-        # Add nodes
         graph.add_node("tools", tool_node)
-
-        # Add edges
         graph.add_edge("tools", END)
 
-        # Configure graph
+        # Configure graph settings
         graph.set_entry_point("tools")
         if self.checkpointer:
             graph.checkpointer = self.checkpointer
 
-        compiled = graph.compile()
-        return compiled
+        return graph.compile()
 
-    async def execute(self, inputs: Dict[str, Any], thread_id: Optional[str] = None, node_name: Optional[str] = None, **kwargs) -> Dict[str, Any]:
+    async def execute(
+        self,
+        inputs: Dict[str, Any],
+        thread_id: Optional[str] = None,
+        node_name: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
         """Execute the agent with the given inputs"""
         if not self.graph:
             try:
                 await self.setup()
             except Exception as e:
-                logger.error(f"Failed to setup graph: {str(e)}")
-                raise RuntimeError(f"Failed to initialize agent graph: {str(e)}")
+                error_msg = f"Failed to initialize agent graph: {str(e)}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg)
 
         try:
-            # If a thread_id is provided, set it in the checkpointer context
+            # Set thread_id if provided
             if self.checkpointer and thread_id:
                 self.checkpointer.set_thread_id(thread_id)
 
@@ -97,9 +100,9 @@ class CustomLangGraphAgent(LangGraphAgent):
             if not isinstance(inputs, dict):
                 inputs = {"input": inputs}
 
-            # Execute the graph with the inputs
+            # Execute graph
             result = await self.graph.arun(inputs, **kwargs)
-            return result  # Return the raw result without wrapping
+            return result
         except Exception as e:
             error_msg = f"Error executing agent: {str(e)}"
             logger.error(error_msg)
@@ -115,4 +118,5 @@ class CustomLangGraphAgent(LangGraphAgent):
             try:
                 await self.checkpointer.delete(f"{self.name}_state")
             except Exception as e:
-                logger.error(f"Error cleaning up agent: {str(e)}")
+                error_msg = f"Error cleaning up agent: {str(e)}"
+                logger.error(error_msg)
