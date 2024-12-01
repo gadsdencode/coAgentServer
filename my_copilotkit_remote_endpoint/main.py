@@ -1,60 +1,31 @@
 # my_copilotkit_remote_endpoint/main.py
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI
 from copilotkit.integrations.fastapi import add_fastapi_endpoint
-from copilotkit import CopilotKitSDK
 from fastapi.responses import JSONResponse
-# import json
+from copilotkit import CopilotKitSDK
+from langchain_openai import ChatOpenAI
+from langchain_core.tools import tool
 import logging
-import uvicorn
 import os
-import datetime
-from typing import Optional
-# import uuid
-import time
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from datetime import datetime
+from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
+from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
+from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
+from my_copilotkit_remote_endpoint.custom_langgraph_agent import (
+    CustomLangGraphAgent
+)
+import httpx
 import sentry_sdk
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
-from my_copilotkit_remote_endpoint.utils.redis_client import redis_client
-from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
-# import redis.asyncio as redis
-from my_copilotkit_remote_endpoint.custom_langgraph_agent import CustomLangGraphAgent
-# from my_copilotkit_remote_endpoint.agent import the_langraph_graph
-from dotenv import load_dotenv
-from my_copilotkit_remote_endpoint.checkpointer import checkpointer
-from langchain.tools import tool
-import requests
-from typing import Any, List
-from contextlib import asynccontextmanager
-from copilotkit import LangGraphAgent
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure logging for the application
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+# Configure logging
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-
-# Lifespan event handler to replace deprecated startup/shutdown events
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
-    try:
-        # Startup logic
-        await safe_redis_operation(redis_client.ping())
-        logger.info("Connected to Redis successfully.")
-        yield
-    except Exception as e:
-        logger.error(f"Failed during startup: {e}")
-        raise
-    finally:
-        # Shutdown logic
-        logger.info("Shutting down application...")
-        await safe_redis_operation(redis_client.close())
+# Load environment variables
+load_dotenv()
 
 # Sentry DSN configuration for error tracking and monitoring
 SENTRY_DSN = os.getenv(
@@ -69,8 +40,8 @@ sentry_sdk.init(
     },
 )
 
-# Initialize FastAPI app with lifespan handler and Sentry middleware
-app = FastAPI(lifespan=lifespan, redirect_slashes=True)
+# Initialize FastAPI app
+app = FastAPI()
 app.add_middleware(SentryAsgiMiddleware)
 
 # Configure CORS settings based on environment variables or defaults
@@ -93,166 +64,98 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Pydantic models for request validation and data handling
-class CopilotActionRequest(BaseModel):
-    action_name: str
-    parameters: Optional[dict] = None
-
-
-class ApprovalUpdate(BaseModel):
-    request_id: str
-    approved: bool
+# Initialize OpenAI model
+model = ChatOpenAI(
+    temperature=0,
+    streaming=True,
+    openai_api_key=os.getenv("OPENAI_API_KEY")
+)
 
 
 @tool
-def get_current_weather(city: str) -> str:
-    """Fetches real-time weather for a city."""
+async def get_current_weather(city: str) -> str:
+    """Fetches current weather data for the specified city."""
     API_KEY = os.getenv("OPENWEATHERMAP_API_KEY")
     if not API_KEY:
-        logger.error("Missing OpenWeatherMap API key.")
-        return "Weather service unavailable."
+        raise ValueError("Weather service configuration missing")
 
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={API_KEY}&units=metric"
+    cache_key = f"weather:{city.lower()}"
+
+    # Try cache first
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        logger.info(f"Weather API response: {response.json()}")
-        # Parse and return weather information
-        data = response.json()
-        weather_description = data["weather"][0]["description"].capitalize()
-        temperature = data["main"]["temp"]
-        return f"The current weather in {city} is {weather_description} with a temperature of {temperature}°C."
-    except requests.RequestException as e:
-        logger.error(f"Weather API request failed: {e}")
-        return "Unable to fetch weather data."
+        cached = await safe_redis_operation(redis_client.get(cache_key))
+        if cached:
+            return cached
+    except Exception as e:
+        logger.warning(f"Cache read failed: {e}")
+
+    # Fetch from API if not cached
+    url = (
+        "http://api.openweathermap.org/data/2.5/weather"
+        f"?q={city}&appid={API_KEY}&units=metric"
+    )
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(url)
+            response.raise_for_status()
+            data = response.json()
+
+            weather = data["weather"][0]["description"].capitalize()
+            temp = data["main"]["temp"]
+            result = f"The weather in {city} is {weather} with {temp}°C"
+
+            # Cache for 5 minutes
+            await safe_redis_operation(
+                redis_client.setex(cache_key, 300, result)
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"Weather API error: {e}")
+            raise ValueError("Weather service unavailable")
 
 
+# Initialize checkpointer
+checkpointer = RedisCheckpointer()
+
+# Create the agent
 agent = CustomLangGraphAgent(
     name="weather_agent",
     description="An agent that provides weather information",
     tools=[get_current_weather],
-    checkpointer=checkpointer,
+    checkpointer=checkpointer
 )
 
 # Initialize SDK with the agent
 sdk = CopilotKitSDK(agents=[agent])
 
-# Add the CopilotKit endpoint to your FastAPI app
+# Add the CopilotKit endpoint
 add_fastapi_endpoint(app, sdk, "/copilotkit_remote")
-
-
-@app.get("/sentry-debug")
-async def trigger_error():
-    """Trigger an error to test Sentry integration."""
-    1 / 0
-
-
-@app.middleware("http")
-async def error_handling_middleware(request: Request, call_next):
-    try:
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": str(e)},
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint to verify service status."""
+    """Health check endpoint."""
     headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Credentials": "true",
     }
     redis_status = "up"
     try:
-        # Use safe_redis_operation for reliable connection checking
-        result = await safe_redis_operation(redis_client.ping())
-        logger.info(f"Redis ping result: {result}")
+        await safe_redis_operation(redis_client.ping())
     except Exception as e:
         redis_status = "down"
-        logger.error(f"Redis ping failed with error: {str(e)}")
+        logger.error(f"Redis health check failed: {e}")
 
     return JSONResponse(
         content={
-            "status": "healthy" if redis_status == "up" else "error",
+            "status": "healthy" if redis_status == "up" else "degraded",
             "redis": redis_status,
-            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-            "version": "1.0.0",
+            "timestamp": datetime.utcnow().isoformat() + "Z",
         },
-        headers=headers,
+        headers=headers
     )
-
-
-@app.post("/update_approval_status")
-async def update_approval_status(update: ApprovalUpdate):
-    """Endpoint to update human approval status."""
-    try:
-        approval_key = f"approval_request:{update.request_id}"
-        request_data = await safe_redis_operation(redis_client.hgetall(approval_key))
-        if not request_data:
-            raise HTTPException(status_code=404, detail="Approval request not found")
-
-        timestamp = float(request_data.get("timestamp", 0))
-        if time.time() - timestamp > 3600:
-            await safe_redis_operation(redis_client.delete(approval_key))
-            raise HTTPException(status_code=410, detail="Approval request has expired")
-
-        await safe_redis_operation(
-            redis_client.hset(approval_key, mapping={"status": "approved" if update.approved else "rejected"})
-        )
-        return {"status": "success", "request_id": update.request_id}
-
-    except HTTPException as he:
-        raise he
-
-    except Exception as e:
-        logger.error(f"Error updating approval status: {str(e)}")
-        sentry_sdk.capture_exception(e)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Application startup event."""
-    logger.info("Starting application")
-    try:
-        # Initialize Redis connection
-        await safe_redis_operation(redis_client.ping())
-        logger.info("Connected to Redis successfully")
-
-        # Setup agent
-        await agent.setup()
-        logger.info("Agent setup completed")
-    except Exception as e:
-        logger.error(f"Startup failed: {str(e)}")
-        raise
-
-# Set the lifespan handler for the app
-app.router.lifespan = lifespan
-
-
-# Add the required method to CustomLangGraphAgent
-class CustomLangGraphAgent(LangGraphAgent):
-    def __init__(self, name: str, description: str, tools: List[Any], checkpointer: Any):
-        self.tools = tools
-        self.checkpointer = checkpointer
-        logger.info(f"Checkpointer in __init__: {self.checkpointer}")
-        # Create the graph with tools synchronously
-        graph = self.create_graph_with_tools()
-        # Initialize the base agent with the created graph
-        super().__init__(name=name, description=description, graph=graph)
-        logger.info("Agent initialized.")
-
-    async def setup(self):
-        """Placeholder setup method."""
-        logger.info("Running agent setup...")
-
 
 if __name__ == "__main__":
     # Update port to match deployment requirements (e.g., Railway)
