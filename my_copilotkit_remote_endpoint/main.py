@@ -31,6 +31,31 @@ from copilotkit import LangGraphAgent
 # Load environment variables from .env file
 load_dotenv()
 
+# Configure logging for the application
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+# Lifespan event handler to replace deprecated startup/shutdown events
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
+    try:
+        # Startup logic
+        await safe_redis_operation(redis_client.ping())
+        logger.info("Connected to Redis successfully.")
+        yield
+    except Exception as e:
+        logger.error(f"Failed during startup: {e}")
+        raise
+    finally:
+        # Shutdown logic
+        logger.info("Shutting down application...")
+        await safe_redis_operation(redis_client.close())
+
 # Sentry DSN configuration for error tracking and monitoring
 SENTRY_DSN = os.getenv(
     "SENTRY_DSN",
@@ -44,8 +69,8 @@ sentry_sdk.init(
     },
 )
 
-# Initialize FastAPI app with Sentry middleware for error tracking
-app = FastAPI(redirect_slashes=True)
+# Initialize FastAPI app with lifespan handler and Sentry middleware
+app = FastAPI(lifespan=lifespan, redirect_slashes=True)
 app.add_middleware(SentryAsgiMiddleware)
 
 # Configure CORS settings based on environment variables or defaults
@@ -67,13 +92,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Configure logging for the application
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
 
 
 # Pydantic models for request validation and data handling
@@ -215,25 +233,6 @@ async def startup_event():
     except Exception as e:
         logger.error(f"Startup failed: {str(e)}")
         raise
-
-
-# Lifespan event handler to replace deprecated startup/shutdown events
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info(f"Starting application in ENV: {os.getenv('ENV')}")
-    try:
-        # Startup logic
-        await safe_redis_operation(redis_client.ping())
-        logger.info("Connected to Redis successfully.")
-        await agent.setup()  # Assuming setup is required for initializing
-        yield
-    except Exception as e:
-        logger.error(f"Failed during startup: {e}")
-        yield
-    finally:
-        # Shutdown logic
-        logger.info("Shutting down application...")
-        await safe_redis_operation(redis_client.close())
 
 # Set the lifespan handler for the app
 app.router.lifespan = lifespan
