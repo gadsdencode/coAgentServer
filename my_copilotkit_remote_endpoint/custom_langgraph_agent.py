@@ -2,7 +2,7 @@
 
 from copilotkit import LangGraphAgent
 from typing import Any, List, Dict, Optional
-from langgraph.graph import Graph, MessageGraph, END
+from langgraph.graph import MessageGraph, END
 from langgraph.prebuilt import ToolNode
 import logging
 from langchain.tools import BaseTool
@@ -63,11 +63,18 @@ class CustomLangGraphAgent(LangGraphAgent):
 
         logger.info(f"Initializing CustomLangGraphAgent: {name}")
 
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute(
+        self,
+        inputs: Dict[str, Any],
+        thread_id: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
         """Execute the agent with the given inputs.
 
         Args:
             inputs: Dictionary containing the input parameters
+            thread_id: Optional thread identifier for conversation context
+            **kwargs: Additional keyword arguments passed by CopilotKit
 
         Returns:
             Dict containing the execution results
@@ -77,6 +84,10 @@ class CustomLangGraphAgent(LangGraphAgent):
             input_str = inputs.get("inputs", "")
             if not input_str:
                 raise ValueError("No input provided")
+
+            # Set thread_id in checkpointer if provided
+            if thread_id and self.checkpointer:
+                self.checkpointer.set_thread_id(thread_id)
 
             # Convert to the format expected by the graph
             input_dict = {"input": input_str}
