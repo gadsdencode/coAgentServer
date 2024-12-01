@@ -6,9 +6,11 @@ from langgraph.graph import MessageGraph, END
 from langgraph.prebuilt import ToolNode
 import logging
 from langchain.tools import BaseTool
+from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 
 logger = logging.getLogger(__name__)
 
+checkpointer = RedisCheckpointer()
 
 class CustomLangGraphAgent(LangGraphAgent):
     """
@@ -47,7 +49,8 @@ class CustomLangGraphAgent(LangGraphAgent):
         super().__init__(
             name=name,
             description=description,
-            graph=compiled_graph
+            graph=compiled_graph,
+            checkpointer=checkpointer
         )
 
         # Store tools for reference
