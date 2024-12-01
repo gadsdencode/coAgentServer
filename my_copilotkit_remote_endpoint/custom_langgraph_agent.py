@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 checkpointer = RedisCheckpointer()
 
+
 class CustomLangGraphAgent(LangGraphAgent):
     """
     A custom LangGraph agent that integrates with CopilotKit.
@@ -49,8 +50,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         super().__init__(
             name=name,
             description=description,
-            graph=compiled_graph,
-            checkpointer=checkpointer
+            graph=compiled_graph
         )
 
         # Store tools for reference
