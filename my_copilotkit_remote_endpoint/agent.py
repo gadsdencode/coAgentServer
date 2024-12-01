@@ -1,4 +1,5 @@
 # my_copilotkit_remote_endpoint/agent.py
+from fastapi import FastAPI, Request
 from langgraph.graph import MessageGraph, END
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, FunctionMessage
@@ -6,13 +7,14 @@ from langchain_core.tools import tool
 from typing import Any, List
 import logging
 import os
-import json
+# import json
 import re
 import requests
 from copilotkit import LangGraphAgent
 from dotenv import load_dotenv
 from langgraph.prebuilt import ToolNode
 from my_copilotkit_remote_endpoint.checkpointer import Checkpointer
+
 
 # Configure logging for the agent
 logger = logging.getLogger(__name__)
@@ -156,7 +158,8 @@ class WeatherAgent(LangGraphAgent):
         Process incoming messages with proper error handling.
         """
         try:
-            result = await self.graph.arun(message)
+            # Ensure 'inputs' are correctly passed to the graph's arun method
+            result = await self.graph.arun(inputs=message)  # Updated line
             return result
         except Exception as e:
             logger.error(f"Error processing message: {e}")
@@ -165,3 +168,20 @@ class WeatherAgent(LangGraphAgent):
 
 # Create a single instance of the agent
 weather_agent = WeatherAgent()
+
+
+# Example of handling an HTTP request with 'inputs'
+
+
+app = FastAPI()
+
+
+@app.post("/process")
+async def process(request: Request):
+    data = await request.json()
+    inputs = data.get("inputs")  # Ensure 'inputs' key is used
+    if not inputs:
+        return {"error": "Missing 'inputs' in request."}
+
+    result = await weather_agent.process_message(inputs)
+    return result
