@@ -18,6 +18,7 @@ from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 from my_copilotkit_remote_endpoint.utils.redis_utils import safe_redis_operation
 from my_copilotkit_remote_endpoint.utils.redis_client import redis_client, check_connection, close
 # from my_copilotkit_remote_endpoint.tools.weather import get_current_weather
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -185,13 +186,14 @@ def create_graph():
 
 
 class WeatherAgent(LangGraphAgent):
-    def __init__(self):
+    def __init__(self, thread_id: str):
         super().__init__(
             name="weather_oracle",
             description="An agent that provides weather information with state management",
             graph=create_graph(),
             checkpointer=RedisCheckpointer(ttl=3600),
-            tools=[get_current_weather]
+            tools=[get_current_weather],
+            thread_id=thread_id
         )
 
     async def process_message(self, message: str) -> Dict[str, Any]:
@@ -201,7 +203,8 @@ class WeatherAgent(LangGraphAgent):
         try:
             result = await self.graph.arun({
                 "messages": [HumanMessage(content=message)],
-                "session_id": session_id
+                "session_id": session_id,
+                "thread_id": self.thread_id
             })
 
             # Extract the final message
@@ -210,17 +213,23 @@ class WeatherAgent(LangGraphAgent):
                 if isinstance(final_message, AIMessage):
                     return {
                         "response": final_message.content,
-                        "session_id": session_id
+                        "session_id": session_id,
+                        "thread_id": self.thread_id
                     }
 
             return {
                 "response": str(result),
-                "session_id": session_id
+                "session_id": session_id,
+                "thread_id": self.thread_id
             }
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")
-            return {"error": str(e), "session_id": session_id}
+            return {
+                "error": str(e),
+                "session_id": session_id,
+                "thread_id": self.thread_id
+            }
 
 
 # Initialize FastAPI app
