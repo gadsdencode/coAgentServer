@@ -1,7 +1,7 @@
 # my_copilotkit_remote_endpoint/custom_langgraph_agent.py
 
 from copilotkit import LangGraphAgent
-from typing import Any, List, Dict, Optional
+from typing import Any, Dict
 from langgraph.graph import MessageGraph, END
 from langgraph.prebuilt import ToolNode
 import logging
@@ -9,17 +9,8 @@ from langchain.tools import BaseTool
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage, AIMessage
 import uuid
-from typing import Tuple
+
 logger = logging.getLogger(__name__)
-
-
-class LangGraphConfig(BaseModel):
-    """Configuration for LangGraph"""
-    name: str
-    description: str
-    tools: List[BaseTool]
-    checkpoint_interval: Optional[int] = 5
-    max_steps: Optional[int] = 10
 
 
 class CustomLangGraphAgent(LangGraphAgent):
@@ -31,8 +22,8 @@ class CustomLangGraphAgent(LangGraphAgent):
         self,
         name: str,
         description: str,
-        tools: List[BaseTool],
-        checkpointer: Optional[Any] = None
+        tools: list[BaseTool],
+        checkpointer: Any = None
     ):
         # Create the graph with proper message handling
         graph = MessageGraph()
@@ -61,26 +52,33 @@ class CustomLangGraphAgent(LangGraphAgent):
         self.tools = tools
         self.checkpointer = checkpointer
 
-    async def execute(self, inputs: Dict[str, Any]) -> Tuple[Dict[str, Any], str, str]:
-        """
-        Execute the agent with provided inputs and state management
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute the agent with provided inputs.
+
+        Args:
+            inputs: Dictionary containing the input parameters
+
+        Returns:
+            Dict containing the execution results
         """
         try:
-            # Generate session ID for state tracking
-            session_id = str(uuid.uuid4())
-
-            # Format messages
+            # Format messages based on input type
             if isinstance(inputs, str):
                 messages = [HumanMessage(content=inputs)]
             elif isinstance(inputs, dict):
-                messages = inputs.get("messages", [HumanMessage(content=str(inputs))])
+                # Handle both "inputs" and "messages" keys
+                if "inputs" in inputs:
+                    messages = [HumanMessage(content=inputs["inputs"])]
+                else:
+                    messages = inputs.get("messages", [
+                        HumanMessage(content=str(inputs))
+                    ])
             else:
                 messages = [HumanMessage(content=str(inputs))]
 
             # Execute graph with state management
             result = await self.graph.arun({
-                "messages": messages,
-                "session_id": session_id
+                "messages": messages
             })
 
             # Extract and format response
@@ -88,13 +86,11 @@ class CustomLangGraphAgent(LangGraphAgent):
                 final_message = result["messages"][-1]
                 if isinstance(final_message, AIMessage):
                     return {
-                        "output": final_message.content,
-                        "session_id": session_id
+                        "output": final_message.content
                     }
 
             return {
-                "output": str(result),
-                "session_id": session_id
+                "output": str(result)
             }
 
         except Exception as e:
@@ -106,3 +102,11 @@ class CustomLangGraphAgent(LangGraphAgent):
         logger.info(f"Setting up agent: {self.name}")
         if self.checkpointer:
             await self.checkpointer.setup()
+
+    async def cleanup(self) -> None:
+        """Cleanup any resources"""
+        if self.checkpointer:
+            try:
+                await self.checkpointer.delete(f"{self.name}_state")
+            except Exception as e:
+                logger.error(f"Error cleaning up agent: {e}")
