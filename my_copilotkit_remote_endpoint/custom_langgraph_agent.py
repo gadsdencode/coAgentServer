@@ -24,6 +24,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         name: str,
         description: str,
         tools: list[BaseTool],
+        model: Any,
         checkpointer: Any = None
     ):
         # Create graph structure
@@ -50,9 +51,10 @@ class CustomLangGraphAgent(LangGraphAgent):
         super().__init__(
             name=name,
             description=description,
-            graph=compiled_graph
+            graph=compiled_graph,
+            model=model
         )
 
         # Store tools for reference
         self.tools = tools
-        logger.info(f"Initialized agent {name} with {len(tools)} tools")
+        logger.info(f"Initialized agent {name} with {len(tools)} tools and model {model}.")

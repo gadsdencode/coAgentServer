@@ -142,7 +142,7 @@ app = FastAPI()
 
 # Create agent instance with Redis checkpointer
 weather_agent = LangGraphAgent(
-    name="weather_oracle",
+    name="weather_agent",
     description="An agent that provides weather information",
     graph=create_graph()
 )
