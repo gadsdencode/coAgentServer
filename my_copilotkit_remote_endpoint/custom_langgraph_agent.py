@@ -38,13 +38,13 @@ class CustomLangGraphAgent(LangGraphAgent):
         graph.add_edge("tools", END)
         graph.set_entry_point("tools")
 
-        # Set checkpointer if provided
-        if checkpointer:
-            graph.checkpointer = checkpointer
-            logger.info(f"Set checkpointer on graph for agent {name}")
-
         # Compile graph
         compiled_graph = graph.compile()
+
+        # Set checkpointer on compiled graph
+        if checkpointer:
+            compiled_graph.checkpointer = checkpointer
+            logger.info(f"Set checkpointer on compiled graph for agent {name}")
 
         # Initialize parent with compiled graph
         super().__init__(
