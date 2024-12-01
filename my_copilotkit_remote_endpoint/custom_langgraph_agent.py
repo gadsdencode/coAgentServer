@@ -28,14 +28,31 @@ class CustomLangGraphAgent(LangGraphAgent):
         tools: List[BaseTool],
         checkpointer: Any,
     ):
-        # Initialize parent class
-        super().__init__(name=name)
+        # Create the initial graph
+        graph = MessageGraph()
+        tool_node = ToolNode(
+            tools=tools,
+            name=f"{name}_tools"
+        )
+        graph.add_node("tools", tool_node)
+        graph.add_edge("tools", END)
+        graph.set_entry_point("tools")
 
-        self.name = name
-        self.description = description
+        if checkpointer:
+            graph.checkpointer = checkpointer
+
+        compiled_graph = graph.compile()
+
+        # Initialize parent class with all required parameters
+        super().__init__(
+            name=name,
+            description=description,
+            graph=compiled_graph
+        )
+
         self.tools = tools
         self.checkpointer = checkpointer
-        self.graph = None
+        self.graph = compiled_graph
 
         # Configure the agent
         self.langgraph_config = LangGraphConfig(
@@ -47,14 +64,10 @@ class CustomLangGraphAgent(LangGraphAgent):
         logger.info(f"Initializing CustomLangGraphAgent: {name}")
 
     async def setup(self) -> None:
-        """Initialize the agent and create the graph"""
-        try:
-            self.graph = await self._create_graph()
-            logger.info(f"Graph created successfully for agent: {self.name}")
-        except Exception as e:
-            error_msg = f"Failed to create graph: {str(e)}"
-            logger.error(error_msg)
-            raise RuntimeError(error_msg)
+        """Initialize the agent if needed"""
+        logger.info(f"Running agent setup for {self.name}...")
+        # No need to recreate graph since it's already created in __init__
+        pass
 
     async def _create_graph(self) -> Graph:
         """Create and configure the graph with proper async support"""
