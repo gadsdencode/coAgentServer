@@ -24,6 +24,8 @@ from my_copilotkit_remote_endpoint.utils.redis_client import (
 # Configure logging
 logger = logging.getLogger(__name__)
 
+checkpointer = RedisCheckpointer()
+
 # Load environment variables
 load_dotenv()
 
@@ -147,7 +149,8 @@ weather_agent = LangGraphAgent(
     name="weather_oracle",
     description="An agent that provides weather information",
     graph=create_graph(),
-    tools=[get_current_weather]
+    tools=[get_current_weather],
+    checkpointer=checkpointer
 )
 
 
