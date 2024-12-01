@@ -1,11 +1,9 @@
 # my_copilotkit_remote_endpoint/agent.py
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException
 from langgraph.graph import MessageGraph, END
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
-from typing import Any, Dict
 import logging
 import os
 import re
@@ -13,13 +11,13 @@ import requests
 from copilotkit import LangGraphAgent
 from dotenv import load_dotenv
 from langgraph.prebuilt import ToolNode
-from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 from my_copilotkit_remote_endpoint.utils.redis_utils import (
     safe_redis_operation
 )
 from my_copilotkit_remote_endpoint.utils.redis_client import (
     redis_client, check_connection, close
 )
+from my_copilotkit_remote_endpoint.checkpointer import RedisCheckpointer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -128,10 +126,8 @@ def create_graph():
     """Creates a LangGraph with integrated tools."""
     graph = MessageGraph()
 
-    tools = [get_current_weather]
     tool_node = ToolNode(
-        tools=tools,
-        return_messages=True
+        tools=[get_current_weather]
     )
 
     graph.add_node("tools", tool_node)
@@ -148,9 +144,7 @@ app = FastAPI()
 weather_agent = LangGraphAgent(
     name="weather_oracle",
     description="An agent that provides weather information",
-    graph=create_graph(),
-    tools=[get_current_weather],
-    checkpointer=checkpointer
+    graph=create_graph()
 )
 
 
