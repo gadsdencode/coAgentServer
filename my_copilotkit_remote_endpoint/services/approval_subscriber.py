@@ -7,6 +7,7 @@ from ..handlers.action_handler import APPROVAL_CHANNEL
 
 logger = logging.getLogger(__name__)
 
+
 class ApprovalSubscriber:
     def __init__(self, approval_handler):
         self.approval_handler = approval_handler
@@ -46,4 +47,4 @@ class ApprovalSubscriber:
                 # You can implement your approval logic here
                 logger.info(f"Received approval request: {data}")
         except Exception as e:
-            logger.error(f"Error handling message: {e}") 
+            logger.error(f"Error handling message: {e}")
