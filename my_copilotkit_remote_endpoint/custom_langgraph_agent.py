@@ -20,7 +20,6 @@ class LangGraphConfig(BaseModel):
     tools: List[BaseTool]
     checkpoint_interval: Optional[int] = 5
     max_steps: Optional[int] = 10
-    thread_id: Optional[str] = None
 
 
 class CustomLangGraphAgent(LangGraphAgent):
@@ -33,8 +32,7 @@ class CustomLangGraphAgent(LangGraphAgent):
         name: str,
         description: str,
         tools: List[BaseTool],
-        checkpointer: Optional[Any] = None,
-        thread_id: Optional[str] = None
+        checkpointer: Optional[Any] = None
     ):
         # Create the graph with proper message handling
         graph = MessageGraph()
@@ -62,7 +60,6 @@ class CustomLangGraphAgent(LangGraphAgent):
 
         self.tools = tools
         self.checkpointer = checkpointer
-        self.thread_id = thread_id
 
     async def execute(self, inputs: Dict[str, Any]) -> Tuple[Dict[str, Any], str, str]:
         """
@@ -83,8 +80,7 @@ class CustomLangGraphAgent(LangGraphAgent):
             # Execute graph with state management
             result = await self.graph.arun({
                 "messages": messages,
-                "session_id": session_id,
-                "thread_id": self.thread_id
+                "session_id": session_id
             })
 
             # Extract and format response
@@ -93,14 +89,12 @@ class CustomLangGraphAgent(LangGraphAgent):
                 if isinstance(final_message, AIMessage):
                     return {
                         "output": final_message.content,
-                        "session_id": session_id,
-                        "thread_id": self.thread_id
+                        "session_id": session_id
                     }
 
             return {
                 "output": str(result),
-                "session_id": session_id,
-                "thread_id": self.thread_id
+                "session_id": session_id
             }
 
         except Exception as e:
