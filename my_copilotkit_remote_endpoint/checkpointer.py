@@ -45,11 +45,11 @@ class RedisCheckpointer(BaseCheckpointSaver):
             logger.error(f"Checkpoint delete error: {str(e)}")
             raise
 
-    def _generate_key(self, thread_id: str, checkpoint_id: Optional[str] = None) -> str:
+    def _generate_key(self, checkpoint_id: Optional[str] = None) -> str:
         if checkpoint_id:
-            return f"checkpointer:{thread_id}:{checkpoint_id}"
+            return f"checkpointer:{checkpoint_id} : {checkpoint_id}"
         else:
-            return f"checkpointer:{thread_id}"
+            return f"checkpointer:{checkpoint_id}"
 
 
 # Instantiate the checkpointer
